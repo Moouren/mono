@@ -1,0 +1,13 @@
+{
+  "name": "@my-monorepo/my-monorepo",
+  "version": "0.0.1",
+  "private": true,
+  "nx": {
+    "name": "my-monorepo"
+  },
+  "dependencies": {
+    "next": "~15.1.4",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  }
+}
