@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "build": "npx nx build shell && npx nx build auth-example && npx nx build online-sales",
-    "vercel-build": "npm install --legacy-peer-deps && npx --no-install nx build online-sales"
+    "vercel-build": "npm install --legacy-peer-deps && npm install nx@20.7.1 && npx nx build online-sales"
   },
   "private": true,
   "dependencies": {
@@ -57,7 +57,7 @@
     "eslint-plugin-react-hooks": "5.0.0",
     "jiti": "2.4.2",
     "jsdom": "~22.1.0",
-    "nx": "20.6.4",
+    "nx": "^20.7.1",
     "prettier": "^2.6.2",
     "stylis": "^4.3.6",
     "stylis-plugin-rtl": "^2.1.1",
