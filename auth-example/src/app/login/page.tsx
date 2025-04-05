@@ -1,7 +1,7 @@
 // apps/auth-example/app/login/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, Form, Input, Typography, App } from 'antd';
 import { useLogin, useAuth, useAuthState } from '@my-monorepo/shell';
