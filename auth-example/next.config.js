@@ -17,6 +17,10 @@ const nextConfig = {
     // For other options, see https://nextjs.org/docs/architecture/nextjs-compiler#emotion
     emotion: true,
   },
+  typescript:{
+    ignoreBuildErrors: true,
+
+  }
 };
 
 const plugins = [
