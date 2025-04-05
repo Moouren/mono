@@ -2,10 +2,7 @@
   "name": "@my-monorepo/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {
-    "build": "npx nx build shell && npx nx build auth-example && npx nx build online-sales",
-    "vercel-build": "cd ./online-sales && npm install --legacy-peer-deps && npx next build"
-  },
+  "scripts": {},
   "private": true,
   "dependencies": {
     "@ant-design/cssinjs": "^1.23.0",
