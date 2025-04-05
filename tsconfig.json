@@ -5,6 +5,15 @@
   "references": [
     {
       "path": "./apps/my-monorepo"
+    },
+    {
+      "path": "./auth-example"
+    },
+    {
+      "path": "./online-sales"
+    },
+    {
+      "path": "./libs"
     }
   ]
 }
