@@ -1,5 +1,4 @@
-// Example of a custom filter component
-// If you need more advanced filtering
+'use client'
 import { Select, DatePicker, Button, Space, Form } from 'antd';
 import { CustomFiltersProps } from '@my-monorepo/shell';
 

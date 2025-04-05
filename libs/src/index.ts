@@ -1,5 +1,4 @@
-// libs/shell/src/index.ts
-// Auth exports
+'use client'
 export * from './lib/services/auth';
 export * from './lib/utils';
 
@@ -26,6 +25,3 @@ export type {
 export { EntityResource } from './lib/services/resource/entity-resource';
 export type { EntityResourceConfig } from './lib/services/resource/entity-resource';
 
-// For functional approaches (currently commented out)
-// export { DataTable, useDataTable } from './lib/components/data-table';
-// export { createEntityService, useEntityService } from './lib/services/entity/entity.service';

@@ -1,18 +1,21 @@
 // apps/online-sales/app/layout.tsx
-'use client';
-
-import { AuthProvider, AuthService, RtlProvider } from '@my-monorepo/shell';
+// Similar approach for the online-sales app
+// Not marking the entire file as 'use client'
+'use client'
 import { Roboto } from 'next/font/google';
-import { App as AntApp } from 'antd';
 import 'antd/dist/reset.css';
+import dynamic from 'next/dynamic';
+
+// Import client-side only components with dynamic imports
+const ClientSideProviders = dynamic(
+  () => import('./client-provider'),
+  { ssr: false }
+);
 
 const roboto = Roboto({ 
   weight: ['300', '400', '500', '700'],
   subsets: ['latin'] 
 });
-
-// Initialize auth service with the same API endpoint
-const authService = new AuthService(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api');
 
 export default function RootLayout({
   children,
@@ -22,13 +25,9 @@ export default function RootLayout({
   return (
     <html lang="en" dir="rtl">
       <body className={roboto.className}>
-        <RtlProvider theme={{ colorPrimary: '#52c41a' }}>
-          <AntApp>
-            <AuthProvider authService={authService}>
-              {children}
-            </AuthProvider>
-          </AntApp>
-        </RtlProvider>
+        <ClientSideProviders>
+          {children}
+        </ClientSideProviders>
       </body>
     </html>
   );

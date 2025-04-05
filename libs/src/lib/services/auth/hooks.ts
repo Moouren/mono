@@ -1,4 +1,5 @@
-// libs/shell/src/lib/services/auth/hooks.ts
+'use client'
+
 import { useContext, useCallback } from 'react';
 import { AuthContext, AuthContextProps } from './context';
 import { LoginCredentials, RegisterCredentials } from './types';

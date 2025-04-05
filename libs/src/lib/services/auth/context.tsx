@@ -1,5 +1,5 @@
 // libs/shell/src/lib/services/auth/context.tsx
-import  { createContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useEffect, useState, useCallback, ReactNode, JSX } from 'react';
 import { AuthService } from './auth.service';
 import { 
   AuthState, 
@@ -8,6 +8,7 @@ import {
   User, 
   AuthResponse 
 } from './types';
+import dynamic from 'next/dynamic';
 
 // Define the context props interface
 export interface AuthContextProps {
@@ -57,24 +58,27 @@ export interface AuthProviderProps {
   forceTokenRefresh?: boolean;
 }
 
+// Helper to check if we're in a browser environment
+const isBrowser = () => typeof window !== 'undefined';
+
 // Storage key for redirect URL
 const REDIRECT_STORAGE_KEY = 'auth_redirect_url';
 
-// Fix the component return type
-export const AuthProvider = ({ 
+// The internal AuthProvider component
+const AuthProviderComponent = ({ 
   children, 
   authService,
   forceTokenRefresh = false
 }: AuthProviderProps): JSX.Element => {
   const [state, setState] = useState<AuthState>(initialState);
   const [redirectAfterLogin, setRedirectAfterLoginState] = useState<string | undefined>(
-    typeof window !== 'undefined' ? localStorage.getItem(REDIRECT_STORAGE_KEY) || undefined : undefined
+    isBrowser() ? localStorage.getItem(REDIRECT_STORAGE_KEY) || undefined : undefined
   );
 
   // Store redirect URL in localStorage
   const setRedirectAfterLogin = useCallback((url: string) => {
     setRedirectAfterLoginState(url);
-    if (typeof window !== 'undefined') {
+    if (isBrowser()) {
       localStorage.setItem(REDIRECT_STORAGE_KEY, url);
     }
   }, []);
@@ -82,13 +86,16 @@ export const AuthProvider = ({
   // Clear redirect URL from localStorage
   const clearRedirectAfterLogin = useCallback(() => {
     setRedirectAfterLoginState(undefined);
-    if (typeof window !== 'undefined') {
+    if (isBrowser()) {
       localStorage.removeItem(REDIRECT_STORAGE_KEY);
     }
   }, []);
 
   // Initialize auth state on mount
   useEffect(() => {
+    // Skip initialization on server
+    if (!isBrowser()) return;
+    
     const initializeAuth = async () => {
       const isAuthenticated = authService.isAuthenticated();
       const user = authService.getCurrentUser();
@@ -194,6 +201,8 @@ export const AuthProvider = ({
     try {
       await authService.logout();
       clearRedirectAfterLogin();
+    } catch (error) {
+      console.error('Logout error:', error);
     } finally {
       setState({
         ...initialState,
@@ -209,7 +218,7 @@ export const AuthProvider = ({
     }));
   }, []);
 
-  // Create the value object explicitly to fix "Cannot find name 'value'" error
+  // Create the value object explicitly
   const contextValue: AuthContextProps = {
     state,
     login,
@@ -226,3 +235,8 @@ export const AuthProvider = ({
     </AuthContext.Provider>
   );
 };
+
+// Create a dynamically imported version that only runs on the client
+export const AuthProvider = dynamic(() => Promise.resolve(AuthProviderComponent), {
+  ssr: false
+}) as React.FC<AuthProviderProps>;

@@ -52,9 +52,12 @@ export class AuthService {
     // Add interceptor to add auth token to requests
     this.api.interceptors.request.use(
       (config) => {
-        const tokens = this.getTokensFromStorage();
-        if (tokens?.accessToken && config.headers) {
-          config.headers.Authorization = `Bearer ${tokens.accessToken}`;
+        // Only run in browser environment
+        if (this.isBrowser()) {
+          const tokens = this.getTokensFromStorage();
+          if (tokens?.accessToken && config.headers) {
+            config.headers.Authorization = `Bearer ${tokens.accessToken}`;
+          }
         }
         return config;
       },
@@ -71,14 +74,17 @@ export class AuthService {
           originalRequest._retry = true;
           
           try {
-            const tokens = this.getTokensFromStorage();
-            if (tokens?.refreshToken) {
-              const newTokens = await this.refreshToken(tokens.refreshToken);
-              
-              if (newTokens) {
-                // Update the request with the new token
-                originalRequest.headers.Authorization = `Bearer ${newTokens.accessToken}`;
-                return this.api(originalRequest);
+            // Only run in browser environment
+            if (this.isBrowser()) {
+              const tokens = this.getTokensFromStorage();
+              if (tokens?.refreshToken) {
+                const newTokens = await this.refreshToken(tokens.refreshToken);
+                
+                if (newTokens) {
+                  // Update the request with the new token
+                  originalRequest.headers.Authorization = `Bearer ${newTokens.accessToken}`;
+                  return this.api(originalRequest);
+                }
               }
             }
           } catch (refreshError) {
@@ -92,7 +98,11 @@ export class AuthService {
     );
   }
   
-  // Rest of the service methods (login, register, etc.) remain the same
+  // Helper method to check if we're in a browser environment
+  private isBrowser(): boolean {
+    return typeof window !== 'undefined' && typeof document !== 'undefined';
+  }
+  
   public async login(credentials: LoginCredentials): Promise<AuthResponse> {
     // In development/testing mode, use mock authentication
     if (process.env.NODE_ENV !== 'production') {
@@ -137,112 +147,196 @@ export class AuthService {
         }
       };
       
-      this.saveTokensToStorage(response);
+      // Only save tokens if in browser environment
+      if (this.isBrowser()) {
+        this.saveTokensToStorage(response);
+      }
+      
       return response;
     }
     
     // For production, use the real API
     const response = await this.api.post<AuthResponse>('/auth/login', credentials);
-    this.saveTokensToStorage(response.data);
+    
+    // Only save tokens if in browser environment
+    if (this.isBrowser()) {
+      this.saveTokensToStorage(response.data);
+    }
+    
     return response.data;
   }
   
-  // In libs/shell/src/lib/services/auth/auth.service.ts
-public async logout(): Promise<void> {
-  // In development/testing mode, simply clear storage
-  if (process.env.NODE_ENV !== 'production') {
-    this.clearTokensFromStorage();
-    return;
-  }
-  
-  // For production, call the API
-  const tokens = this.getTokensFromStorage();
-  
-  if (tokens?.refreshToken) {
-    try {
-      await this.api.post('/auth/logout', { refreshToken: tokens.refreshToken });
-    } catch (error) {
-      // Continue with logout even if API call fails
-      console.error('Logout API call failed:', error);
-    }
-  }
-  
-  this.clearTokensFromStorage();
-}
-  
   public async register(credentials: RegisterCredentials): Promise<AuthResponse> {
-    // Implementation remains the same, just calls saveTokensToStorage at the end
-    // ... existing code ...
+    // In development/testing mode, use mock registration
+    if (process.env.NODE_ENV !== 'production') {
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // Check if user already exists
+      if (this.mockUsers.some(u => u.email === credentials.email)) {
+        throw new Error('User with this email already exists');
+      }
+      
+      // Create new mock user
+      const newUser = {
+        id: (this.mockUsers.length + 1).toString(),
+        email: credentials.email,
+        password: credentials.password,
+        name: credentials.name,
+        role: 'user'
+      };
+      
+      // Add to mock users (in real app this would persist to database)
+      this.mockUsers.push(newUser);
+      
+      // Create tokens like in the login method
+      const now = new Date();
+      const exp = new Date(now.getTime() + 30 * 60000); // 30 minutes
+      
+      const tokenPayload = {
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          name: newUser.name,
+          role: newUser.role
+        },
+        exp: Math.floor(exp.getTime() / 1000)
+      };
+      
+      const accessToken = btoa(JSON.stringify(tokenPayload));
+      const refreshToken = 'mock-refresh-token-' + newUser.id;
+      
+      const response: AuthResponse = {
+        accessToken,
+        refreshToken,
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          name: newUser.name,
+          role: newUser.role
+        }
+      };
+      
+      // Only save tokens if in browser environment
+      if (this.isBrowser()) {
+        this.saveTokensToStorage(response);
+      }
+      
+      return response;
+    }
     
     // For production, use the real API
     const response = await this.api.post<AuthResponse>('/auth/register', credentials);
-    this.saveTokensToStorage(response.data);
+    
+    // Only save tokens if in browser environment
+    if (this.isBrowser()) {
+      this.saveTokensToStorage(response.data);
+    }
+    
     return response.data;
   }
   
-  // ... other methods ...
+  public async logout(): Promise<void> {
+    // Only proceed if in browser environment
+    if (!this.isBrowser()) return;
+    
+    // In development/testing mode, simply clear storage
+    if (process.env.NODE_ENV !== 'production') {
+      this.clearTokensFromStorage();
+      return;
+    }
+    
+    // For production, call the API
+    const tokens = this.getTokensFromStorage();
+    
+    if (tokens?.refreshToken) {
+      try {
+        await this.api.post('/auth/logout', { refreshToken: tokens.refreshToken });
+      } catch (error) {
+        // Continue with logout even if API call fails
+        console.error('Logout API call failed:', error);
+      }
+    }
+    
+    this.clearTokensFromStorage();
+  }
   
-  // Modified token storage methods using cookies instead of localStorage
-  public saveTokensToStorage(authResponse: AuthResponse): void {
-    if (typeof document !== 'undefined') {
-      const tokenData = JSON.stringify({
-        accessToken: authResponse.accessToken,
-        refreshToken: authResponse.refreshToken,
+  public async refreshToken(refreshToken: string): Promise<AuthResponse | null> {
+    // Only proceed if in browser environment
+    if (!this.isBrowser()) return null;
+    
+    // In development/testing mode
+    if (process.env.NODE_ENV !== 'production') {
+      // Parse the existing token to get the user ID
+      const tokens = this.getTokensFromStorage();
+      if (!tokens?.accessToken) return null;
+      
+      try {
+        // Decode the mock token
+        const decoded = JSON.parse(atob(tokens.accessToken));
+        const userId = decoded.user.id;
+        
+        // Find the user
+        const user = this.mockUsers.find(u => u.id === userId);
+        if (!user) {
+          this.clearTokensFromStorage();
+          return null;
+        }
+        
+        // Create new tokens
+        const now = new Date();
+        const exp = new Date(now.getTime() + 30 * 60000); // 30 minutes
+        
+        const tokenPayload = {
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role
+          },
+          exp: Math.floor(exp.getTime() / 1000)
+        };
+        
+        const newAccessToken = btoa(JSON.stringify(tokenPayload));
+        const newRefreshToken = 'mock-refresh-token-' + user.id;
+        
+        const response: AuthResponse = {
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role
+          }
+        };
+        
+        this.saveTokensToStorage(response);
+        return response;
+      } catch (error) {
+        this.clearTokensFromStorage();
+        return null;
+      }
+    }
+    
+    // For production
+    try {
+      const response = await this.api.post<AuthResponse>('/auth/refresh', {
+        refreshToken,
       });
       
-      // Create the cookie string
-      let cookieStr = `${AuthService.TOKEN_STORAGE_KEY}=${encodeURIComponent(tokenData)}`;
-      
-      // Add cookie options
-      cookieStr += `; path=${this.cookieOptions.path}`;
-      cookieStr += `; domain=${this.cookieOptions.domain}`;
-      cookieStr += `; max-age=${this.cookieOptions.maxAge}`;
-      
-      if (this.cookieOptions.secure) {
-        cookieStr += '; secure';
-      }
-      
-      cookieStr += `; samesite=${this.cookieOptions.sameSite}`;
-      
-      // Set the cookie
-      document.cookie = cookieStr;
-      
-      console.log('Auth tokens saved to cookie');
-    }
-  }
-  
-  public getTokensFromStorage(): { accessToken: string; refreshToken: string } | null {
-    if (typeof document === 'undefined') {
-      return null;
-    }
-    
-    // Parse cookies
-    const cookies = document.cookie.split(';');
-    const tokenCookie = cookies.find(c => c.trim().startsWith(`${AuthService.TOKEN_STORAGE_KEY}=`));
-    
-    if (!tokenCookie) {
-      return null;
-    }
-    
-    try {
-      const tokenValue = tokenCookie.split('=')[1].trim();
-      return JSON.parse(decodeURIComponent(tokenValue));
+      this.saveTokensToStorage(response.data);
+      return response.data;
     } catch (error) {
-      console.error('Error parsing auth token cookie:', error);
+      this.clearTokensFromStorage();
       return null;
     }
   }
   
-  public clearTokensFromStorage(): void {
-    if (typeof document !== 'undefined') {
-      // To delete a cookie, set its expiration to a past date
-      document.cookie = `${AuthService.TOKEN_STORAGE_KEY}=; path=${this.cookieOptions.path}; domain=${this.cookieOptions.domain}; max-age=0`;
-      console.log('Auth tokens cleared from cookie');
-    }
-  }
-  
-  // Other methods remain the same
   public isAuthenticated(): boolean {
+    // Only proceed if in browser environment
+    if (!this.isBrowser()) return false;
+    
     const tokens = this.getTokensFromStorage();
     
     if (!tokens?.accessToken) {
@@ -274,8 +368,9 @@ public async logout(): Promise<void> {
   }
   
   public getCurrentUser(): User | null {
-    // Implementation remains the same, uses getTokensFromStorage
-    // ... existing code ...
+    // Only proceed if in browser environment
+    if (!this.isBrowser()) return null;
+    
     const tokens = this.getTokensFromStorage();
     
     if (!tokens?.accessToken) {
@@ -299,6 +394,117 @@ public async logout(): Promise<void> {
       return decodedToken.user;
     } catch (error) {
       return null;
+    }
+  }
+  
+  public async validateAndRefreshToken(): Promise<boolean> {
+    // Only proceed if in browser environment
+    if (!this.isBrowser()) return false;
+    
+    try {
+      const tokens = this.getTokensFromStorage();
+      if (!tokens?.accessToken) {
+        return false;
+      }
+      
+      let isValid = false;
+      
+      // For development/testing mode
+      if (process.env.NODE_ENV !== 'production') {
+        try {
+          // Decode our mock token (base64 encoded JSON)
+          const decoded = JSON.parse(atob(tokens.accessToken));
+          const currentTime = Math.floor(Date.now() / 1000);
+          
+          isValid = decoded.exp > currentTime;
+        } catch (e) {
+          return false;
+        }
+      } else {
+        // Production code using jwtDecode
+        const decodedToken: { exp: number } = jwtDecode(tokens.accessToken);
+        const currentTime = Date.now() / 1000;
+        
+        isValid = decodedToken.exp > currentTime;
+      }
+      
+      // If token is expired or about to expire, refresh it
+      if (!isValid && tokens.refreshToken) {
+        const newTokens = await this.refreshToken(tokens.refreshToken);
+        return !!newTokens;
+      }
+      
+      return isValid;
+    } catch (error) {
+      return false;
+    }
+  }
+  
+  // Modified token storage methods using cookies instead of localStorage
+  public saveTokensToStorage(authResponse: AuthResponse): void {
+    // Skip if not in browser environment
+    if (!this.isBrowser()) return;
+    
+    try {
+      const tokenData = JSON.stringify({
+        accessToken: authResponse.accessToken,
+        refreshToken: authResponse.refreshToken,
+      });
+      
+      // Create the cookie string
+      let cookieStr = `${AuthService.TOKEN_STORAGE_KEY}=${encodeURIComponent(tokenData)}`;
+      
+      // Add cookie options
+      cookieStr += `; path=${this.cookieOptions.path}`;
+      cookieStr += `; domain=${this.cookieOptions.domain}`;
+      cookieStr += `; max-age=${this.cookieOptions.maxAge}`;
+      
+      if (this.cookieOptions.secure) {
+        cookieStr += '; secure';
+      }
+      
+      cookieStr += `; samesite=${this.cookieOptions.sameSite}`;
+      
+      // Set the cookie
+      document.cookie = cookieStr;
+      
+      console.log('Auth tokens saved to cookie');
+    } catch (error) {
+      console.error('Error saving auth tokens to cookie:', error);
+    }
+  }
+  
+  public getTokensFromStorage(): { accessToken: string; refreshToken: string } | null {
+    // Skip if not in browser environment
+    if (!this.isBrowser()) return null;
+    
+    try {
+      // Parse cookies
+      const cookies = document.cookie.split(';');
+      const tokenCookie = cookies.find(c => c.trim().startsWith(`${AuthService.TOKEN_STORAGE_KEY}=`));
+      
+      if (!tokenCookie) {
+        return null;
+      }
+      
+      const tokenValue = tokenCookie.split('=')[1].trim();
+      return JSON.parse(decodeURIComponent(tokenValue));
+    } catch (error) {
+      console.error('Error parsing auth token cookie:', error);
+      return null;
+    }
+  }
+  
+  public clearTokensFromStorage(): void {
+    // Skip if not in browser environment
+    if (!this.isBrowser()) return;
+    
+    try {
+      // To delete a cookie, set its expiration to a past date
+      document.cookie = `${AuthService.TOKEN_STORAGE_KEY}=; path=${this.cookieOptions.path}; domain=${this.cookieOptions.domain}; max-age=0`;
+      console.log('Auth tokens cleared from cookie');
+    } catch (error) {
+      console.error('Error clearing auth tokens from cookie:', error);
     }
   }
 }
