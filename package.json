@@ -2,7 +2,10 @@
   "name": "@my-monorepo/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+     "build": "nx build shell && nx build auth-example && nx build online-sales",
+  "vercel-build": "npm install && npm run build"
+  },
   "private": true,
   "dependencies": {
     "@ant-design/cssinjs": "^1.23.0",
@@ -14,7 +17,8 @@
     "jwt-decode": "^4.0.0",
     "next": "~15.1.4",
     "react": "19.0.0",
-    "react-dom": "19.0.0"
+    "react-dom": "19.0.0",
+    "nx": "^20.7.1"
   },
   "devDependencies": {
     "@babel/core": "^7.14.5",
