@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "build": "npx nx build shell && npx nx build auth-example && npx nx build online-sales",
-    "vercel-build": "cd apps/online-sales && npm install --legacy-peer-deps && npx next build"
+    "vercel-build": "cd ./online-sales && npm install --legacy-peer-deps && npx next build"
   },
   "private": true,
   "dependencies": {
