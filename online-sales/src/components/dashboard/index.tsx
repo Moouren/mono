@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   Button, 
   Layout, 
@@ -11,7 +11,8 @@ import {
   Statistic,
   Row,
   Col,
-  App
+  App,
+  Spin
 } from 'antd';
 import { 
   ShoppingOutlined, 
@@ -29,10 +30,20 @@ import type { MenuProps } from 'antd';
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
 
-const orderData = [/* ...your data here... */];
+// You would replace this with your actual data
+const orderData = [
+  { id: 1, customer: 'John Doe', status: 'Completed', total: 125.99, date: '2025-04-01' },
+  { id: 2, customer: 'Jane Smith', status: 'Processing', total: 89.50, date: '2025-04-02' }
+];
 
-// Table columns (as in your example)
-const columns = [/* ...your columns here... */];
+// Table columns
+const columns = [
+  { title: 'Order ID', dataIndex: 'id', key: 'id' },
+  { title: 'Customer', dataIndex: 'customer', key: 'customer' },
+  { title: 'Status', dataIndex: 'status', key: 'status' },
+  { title: 'Total', dataIndex: 'total', key: 'total', render: (value: number) => `$${value.toFixed(2)}` },
+  { title: 'Date', dataIndex: 'date', key: 'date' }
+];
 
 export default function Dashboard() {
   const router = useRouter();
@@ -40,93 +51,66 @@ export default function Dashboard() {
   const { logout } = useLogout();
   const { setUser } = useAuth();
   const { message } = App.useApp();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   
   console.log('Dashboard auth state:', { isAuthenticated, user, loading });
   
-  // Debug auth state changes
+  // First, check for auth token in URL
   useEffect(() => {
-    console.log('Auth state changed:', { isAuthenticated, user, loading });
-  }, [isAuthenticated, user, loading]);
-  
-  // Check for auth token in URL
-  useEffect(() => {
-    // Check for token in URL
     const params = new URLSearchParams(window.location.search);
     const authToken = params.get('authToken');
     
-    // Debug logging
-    console.log('URL search:', window.location.search);
-    console.log('Params string:', params.toString());
-    console.log('Auth token present:', !!authToken);
-    
     if (authToken) {
       try {
-        console.log('Auth token found, length:', authToken.length);
-        console.log('First 50 chars of token:', authToken.substring(0, 50));
+        console.log('Auth token found in dashboard, processing...');
         
         // Process the token
         const decodedToken = decodeURIComponent(authToken);
-        console.log('Token decoded, processing...');
+        const tokenData = JSON.parse(decodedToken);
         
-        // Parse the token data
-        try {
-          const tokenData = JSON.parse(decodedToken);
-          console.log('Token parsed successfully, contains:', {
-            hasAccessToken: !!tokenData.accessToken,
-            hasRefreshToken: !!tokenData.refreshToken,
-            hasUserData: !!tokenData.userData
-          });
-          
-          // Create auth service instance just for saving the token
-          const tempAuthService = new AuthService(process.env.NEXT_PUBLIC_API_URL || '');
-          
-          // Validate the token structure before saving
-          if (tokenData.accessToken && tokenData.refreshToken) {
-            // Create dummy response to match what saveTokensToStorage expects
-            const authResponse = {
-              accessToken: tokenData.accessToken,
-              refreshToken: tokenData.refreshToken,
-              user: tokenData.userData || null
-            };
-            
-            // Save the token using your existing method
-            console.log('Saving tokens to storage...');
-            tempAuthService.saveTokensToStorage(authResponse);
-            
-            // If user data is included, set it in context
-            if (tokenData.userData) {
-              setUser(tokenData.userData);
-            }
-            
-            // Clean the URL
-            window.history.replaceState({}, document.title, window.location.pathname);
-            
-            console.log('Token saved successfully, reloading page');
-            // Reload to apply auth state
-            window.location.reload();
-            return; // Important to prevent further execution
-          } else {
-            throw new Error('Invalid token structure');
-          }
-        } catch (parseError) {
-          console.error('Error parsing token JSON:', parseError);
-          console.log('Decoded but unparsable token:', decodedToken.substring(0, 100) + '...');
-          throw parseError;
+        // Create auth service instance for saving the token
+        const tempAuthService = new AuthService(process.env.NEXT_PUBLIC_API_URL || '');
+        
+        // Save the token using your existing method
+        tempAuthService.saveTokensToStorage({
+          accessToken: tokenData.accessToken,
+          refreshToken: tokenData.refreshToken,
+          user: tokenData.userData || null
+        });
+        
+        // If user data is included, set it in context
+        if (tokenData.userData) {
+          setUser(tokenData.userData);
         }
+        
+        // Clean the URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        console.log('Token saved successfully in dashboard');
+        window.location.reload();
+        return;
       } catch (error) {
-        console.error('Failed to process auth token:', error);
-        message.error('Authentication error: Token processing failed');
-        router.push('/');
+        console.error('Failed to process auth token in dashboard:', error);
+        message.error('Authentication error in dashboard');
       }
     }
-  }, [message, router, setUser]);
+    
+    // Set a timeout to detect if authentication is taking too long
+    const authCheckTimeout = setTimeout(() => {
+      setIsCheckingAuth(false);
+    }, 3000); // 3 seconds timeout
+    
+    return () => clearTimeout(authCheckTimeout);
+  }, [message, setUser]);
   
   // Handle auth state for redirect
   useEffect(() => {
     if (!loading) {
+      setIsCheckingAuth(false);
+      
       if (!isAuthenticated) {
         // If not authenticated, redirect to home page which will handle the auth flow
-        console.log('Not authenticated, redirecting to home');
+        console.log('Not authenticated in dashboard, redirecting to home');
         router.push('/');
       }
     }
@@ -154,7 +138,6 @@ export default function Dashboard() {
       
       // Short delay before redirect to ensure all cleanup is done
       setTimeout(() => {
-        // Force a hard redirect to auth app login with logout parameter
         window.location.href = `${process.env.NEXT_PUBLIC_AUTH_URL}/login?logout=true`;
       }, 300);
     } catch (error) {
@@ -163,7 +146,7 @@ export default function Dashboard() {
     }
   };
 
-  // Define menu items using the items API
+  // Define menu items
   const menuItems: MenuProps['items'] = [
     {
       key: 'dashboard',
@@ -188,101 +171,125 @@ export default function Dashboard() {
   ];
 
   // Show loading or unauthorized message
-  if (loading) {
-    return <div>Loading...</div>;
+  if (loading || isCheckingAuth) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh' 
+      }}>
+        <Spin size="large" />
+        <div style={{ marginTop: 16 }}>Checking authentication status...</div>
+      </div>
+    );
   }
 
   if (!isAuthenticated || !user) {
-    return <div>You are not authorized to view this page. Redirecting...</div>;
-  }
-
-  // Rest of the component (content rendering) remains the same
-  return (
-    <Layout style={{ minHeight: '100vh', direction: 'rtl' }}>
-    <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <ShoppingOutlined style={{ fontSize: '24px', color: 'white', marginRight: '10px' }} />
-        <Title level={4} style={{ color: 'white', margin: 0 }}>
-          Online Sales Dashboard
-        </Title>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <Text style={{ color: 'white', marginRight: '15px' }}>
-          {user?.name}
-        </Text>
-        <Button type="text" icon={<LogoutOutlined />} onClick={handleLogout} style={{ color: 'white' }}>
-          Logout
+    return (
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh' 
+      }}>
+        <div style={{ marginBottom: 16 }}>You are not authorized to view this page.</div>
+        <Button type="primary" onClick={() => router.push('/')}>
+          Go to Login
         </Button>
       </div>
-    </Header>
-    <Layout>
-      <Sider width={200} style={{ background: '#fff' }}>
-        <Menu
-          mode="inline"
-          defaultSelectedKeys={['dashboard']}
-          style={{ height: '100%', borderRight: 0 }}
-          items={menuItems}
-        />
-      </Sider>
-      <Layout style={{ padding: '24px' }}>
-        <Content>
-          <Title level={4}>Sales Overview</Title>
-          <Row gutter={16} style={{ marginBottom: '24px' }}>
-            <Col span={6}>
-              <Card>
-                <Statistic
-                  title="Total Sales"
-                  value={''}
-                  precision={2}
-                  valueStyle={{ color: '#3f8600' }}
-                  prefix={<DollarOutlined />}
-                  suffix="$"
-                />
-              </Card>
-            </Col>
-            <Col span={6}>
-              <Card>
-                <Statistic
-                  title="Completed Orders"
-                  value={''}
-                  valueStyle={{ color: '#3f8600' }}
-                  prefix={<ShoppingCartOutlined />}
-                />
-              </Card>
-            </Col>
-            <Col span={6}>
-              <Card>
-                <Statistic
-                  title="Processing Orders"
-                  value={''}
-                  valueStyle={{ color: '#1890ff' }}
-                  prefix={<RiseOutlined />}
-                />
-              </Card>
-            </Col>
-            <Col span={6}>
-              <Card>
-                <Statistic
-                  title="Pending Orders"
-                  value={''}
-                  valueStyle={{ color: '#faad14' }}
-                  prefix={<ShoppingCartOutlined />}
-                />
-              </Card>
-            </Col>
-          </Row>
-          
-          <Card title="Recent Orders" style={{ marginBottom: '24px' }}>
-            <Table
-              columns={columns}
-              dataSource={orderData}
-              rowKey="id"
-              pagination={{ pageSize: 5 }}
-            />
-          </Card>
-        </Content>
+    );
+  }
+
+  // Main dashboard content
+  return (
+    <Layout style={{ minHeight: '100vh', direction: 'rtl' }}>
+      <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <ShoppingOutlined style={{ fontSize: '24px', color: 'white', marginRight: '10px' }} />
+          <Title level={4} style={{ color: 'white', margin: 0 }}>
+            Online Sales Dashboard
+          </Title>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <Text style={{ color: 'white', marginRight: '15px' }}>
+            {user?.name}
+          </Text>
+          <Button type="text" icon={<LogoutOutlined />} onClick={handleLogout} style={{ color: 'white' }}>
+            Logout
+          </Button>
+        </div>
+      </Header>
+      <Layout>
+        <Sider width={200} style={{ background: '#fff' }}>
+          <Menu
+            mode="inline"
+            defaultSelectedKeys={['dashboard']}
+            style={{ height: '100%', borderRight: 0 }}
+            items={menuItems}
+          />
+        </Sider>
+        <Layout style={{ padding: '24px' }}>
+          <Content>
+            <Title level={4}>Sales Overview</Title>
+            <Row gutter={16} style={{ marginBottom: '24px' }}>
+              <Col span={6}>
+                <Card>
+                  <Statistic
+                    title="Total Sales"
+                    value={215.49}
+                    precision={2}
+                    valueStyle={{ color: '#3f8600' }}
+                    prefix={<DollarOutlined />}
+                    suffix="$"
+                  />
+                </Card>
+              </Col>
+              <Col span={6}>
+                <Card>
+                  <Statistic
+                    title="Completed Orders"
+                    value={1}
+                    valueStyle={{ color: '#3f8600' }}
+                    prefix={<ShoppingCartOutlined />}
+                  />
+                </Card>
+              </Col>
+              <Col span={6}>
+                <Card>
+                  <Statistic
+                    title="Processing Orders"
+                    value={1}
+                    valueStyle={{ color: '#1890ff' }}
+                    prefix={<RiseOutlined />}
+                  />
+                </Card>
+              </Col>
+              <Col span={6}>
+                <Card>
+                  <Statistic
+                    title="Pending Orders"
+                    value={0}
+                    valueStyle={{ color: '#faad14' }}
+                    prefix={<ShoppingCartOutlined />}
+                  />
+                </Card>
+              </Col>
+            </Row>
+            
+            <Card title="Recent Orders" style={{ marginBottom: '24px' }}>
+              <Table
+                columns={columns}
+                dataSource={orderData}
+                rowKey="id"
+                pagination={{ pageSize: 5 }}
+              />
+            </Card>
+          </Content>
+        </Layout>
       </Layout>
     </Layout>
-  </Layout>
   );
 }

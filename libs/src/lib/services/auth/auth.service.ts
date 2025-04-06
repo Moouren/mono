@@ -1,452 +1,385 @@
-// libs/shell/src/lib/services/auth/auth.service.ts
+// AuthService.ts
+import Cookies from 'js-cookie';
 import axios, { AxiosInstance } from 'axios';
-import { jwtDecode } from 'jwt-decode';
-import { 
-  AuthResponse, 
-  LoginCredentials, 
-  RegisterCredentials, 
-  User 
-} from './types';
+
+interface User {
+  id: string | number;
+  name: string;
+  email: string;
+  role?: string;
+  [key: string]: any;
+}
+
+interface AuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: User | null;
+}
+
+interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+interface RegisterCredentials {
+  name: string;
+  email: string;
+  password: string;
+}
 
 export class AuthService {
-  // Shared token storage key
-  public static readonly TOKEN_STORAGE_KEY = 'my_monorepo_auth_tokens';
+  private apiUrl: string;
+  private axiosInstance: AxiosInstance;
   
-  private readonly api: AxiosInstance;
-  
-  // Mock credentials for testing
-  private mockUsers = [
-    {
-      email: 'admin@example.com',
-      password: 'password123',
-      name: 'Admin User',
-      role: 'admin',
-      id: '1'
-    },
-    {
-      email: 'user@example.com',
-      password: 'password123',
-      name: 'Regular User',
-      role: 'user',
-      id: '2'
-    }
-  ];
-  
-  constructor(baseURL: string) {
-    this.api = axios.create({
-      baseURL,
+  constructor(apiUrl: string) {
+    this.apiUrl = apiUrl;
+    
+    this.axiosInstance = axios.create({
+      baseURL: apiUrl,
       headers: {
         'Content-Type': 'application/json',
       },
     });
     
-    // Add interceptor to add auth token to requests
-    this.api.interceptors.request.use(
+    // Add request interceptor to add auth token to requests
+    this.axiosInstance.interceptors.request.use(
       (config) => {
-        // Only run in browser environment
-        if (this.isBrowser()) {
-          const tokens = this.getTokensFromStorage();
-          if (tokens?.accessToken && config.headers) {
-            config.headers.Authorization = `Bearer ${tokens.accessToken}`;
-          }
+        const token = this.getAccessToken();
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
       },
       (error) => Promise.reject(error)
     );
-  }
-  
-  // Helper method to check if we're in a browser environment
-  private isBrowser(): boolean {
-    return typeof window !== 'undefined' && typeof document !== 'undefined';
-  }
-
-  // Get dynamic cookie options based on environment
-  private getCookieOptions(): {
-    path: string;
-    domain: string;
-    maxAge: number;
-    secure: boolean;
-    sameSite: string;
-  } {
-    const isProduction = process.env.NODE_ENV === 'production';
-    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     
-    // Base options
-    const options = {
-      path: '/',
-      domain: 'localhost', // Default for development
-      maxAge: 86400, // 1 day in seconds
-      secure: isHttps, // Only use secure flag with HTTPS
-      sameSite: 'lax' as 'lax' | 'strict' | 'none', // Type assertion for TypeScript
-    };
-    
-    // If in production, try to determine proper domain
-    if (isProduction && typeof window !== 'undefined') {
-      const hostname = window.location.hostname;
-      
-      // Handle different production domain strategies
-      if (hostname !== 'localhost') {
-        // For Vercel deployments, use the hostname directly
-        options.domain = hostname;
+    // Add response interceptor to handle token expiration
+    this.axiosInstance.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const originalRequest = error.config;
         
-        // In production with HTTPS, use secure cookies
-        options.secure = isHttps;
-      }
-      
-      console.log('Using cookie domain:', options.domain);
-    }
-    
-    return options;
-  }
-  
-  public async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const user = this.mockUsers.find(u => u.email === credentials.email);
-    
-    if (!user || user.password !== credentials.password) {
-      throw new Error('Invalid email or password');
-    }
-    
-    // Create mock tokens with encoded user info
-    const now = new Date();
-    const exp = new Date(now.getTime() + 30 * 60000); // 30 minutes
-    
-    // Create a simple mock token that contains user info and expiration
-    const tokenPayload = {
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role
-      },
-      exp: Math.floor(exp.getTime() / 1000)
-    };
-    
-    // Base64 encode the token payload - this is just for mocking!
-    const accessToken = btoa(JSON.stringify(tokenPayload));
-    const refreshToken = 'mock-refresh-token-' + user.id;
-    
-    const response: AuthResponse = {
-      accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role
-      }
-    };
-    
-    // Save tokens if in browser environment
-    if (this.isBrowser()) {
-      this.saveTokensToStorage(response);
-    }
-    
-    return response;
-  }
-  
-  public async register(credentials: RegisterCredentials): Promise<AuthResponse> {
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // Check if user already exists
-    if (this.mockUsers.some(u => u.email === credentials.email)) {
-      throw new Error('User with this email already exists');
-    }
-    
-    // Create new mock user
-    const newUser = {
-      id: (this.mockUsers.length + 1).toString(),
-      email: credentials.email,
-      password: credentials.password,
-      name: credentials.name,
-      role: 'user'
-    };
-    
-    // Add to mock users
-    this.mockUsers.push(newUser);
-    
-    // Create tokens like in the login method
-    const now = new Date();
-    const exp = new Date(now.getTime() + 30 * 60000); // 30 minutes
-    
-    const tokenPayload = {
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        name: newUser.name,
-        role: newUser.role
-      },
-      exp: Math.floor(exp.getTime() / 1000)
-    };
-    
-    const accessToken = btoa(JSON.stringify(tokenPayload));
-    const refreshToken = 'mock-refresh-token-' + newUser.id;
-    
-    const response: AuthResponse = {
-      accessToken,
-      refreshToken,
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        name: newUser.name,
-        role: newUser.role
-      }
-    };
-    
-    // Save tokens if in browser environment
-    if (this.isBrowser()) {
-      this.saveTokensToStorage(response);
-    }
-    
-    return response;
-  }
-  
-  public async logout(): Promise<void> {
-    // Only proceed if in browser environment
-    if (!this.isBrowser()) return;
-    
-    // For POC just clear storage
-    this.clearTokensFromStorage();
-  }
-  
-  public async refreshToken(refreshToken: string): Promise<AuthResponse | null> {
-    // Only proceed if in browser environment
-    if (!this.isBrowser()) return null;
-    
-    // Parse the existing token to get the user ID
-    const tokens = this.getTokensFromStorage();
-    if (!tokens?.accessToken) return null;
-    
-    try {
-      // Decode the mock token
-      const decoded = JSON.parse(atob(tokens.accessToken));
-      const userId = decoded.user.id;
-      
-      // Find the user
-      const user = this.mockUsers.find(u => u.id === userId);
-      if (!user) {
-        this.clearTokensFromStorage();
-        return null;
-      }
-      
-      // Create new tokens
-      const now = new Date();
-      const exp = new Date(now.getTime() + 30 * 60000); // 30 minutes
-      
-      const tokenPayload = {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role
-        },
-        exp: Math.floor(exp.getTime() / 1000)
-      };
-      
-      const newAccessToken = btoa(JSON.stringify(tokenPayload));
-      const newRefreshToken = 'mock-refresh-token-' + user.id;
-      
-      const response: AuthResponse = {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role
+        // If error is 401 and we haven't already tried refreshing
+        if (
+          error.response &&
+          error.response.status === 401 &&
+          !originalRequest._retry
+        ) {
+          originalRequest._retry = true;
+          
+          try {
+            // Attempt to refresh the token
+            const refreshToken = this.getRefreshToken();
+            if (!refreshToken) {
+              throw new Error('No refresh token available');
+            }
+            
+            const response = await this.refreshToken();
+            
+            // If refresh successful, retry the original request
+            if (response.accessToken) {
+              originalRequest.headers.Authorization = `Bearer ${response.accessToken}`;
+              return this.axiosInstance(originalRequest);
+            }
+          } catch (refreshError) {
+            // If refresh fails, clear tokens and let the error propagate
+            this.clearTokensFromStorage();
+            return Promise.reject(refreshError);
+          }
         }
-      };
-      
-      this.saveTokensToStorage(response);
-      return response;
-    } catch (error) {
-      this.clearTokensFromStorage();
-      return null;
-    }
-  }
-  
-  public isAuthenticated(): boolean {
-    // Only proceed if in browser environment
-    if (!this.isBrowser()) return false;
-    
-    const tokens = this.getTokensFromStorage();
-    
-    if (!tokens?.accessToken) {
-      return false;
-    }
-    
-    try {
-      // Decode our mock token (base64 encoded JSON)
-      const decoded = JSON.parse(atob(tokens.accessToken));
-      const currentTime = Math.floor(Date.now() / 1000);
-      
-      return decoded.exp > currentTime;
-    } catch (error) {
-      return false;
-    }
-  }
-  
-  public getCurrentUser(): User | null {
-    // Only proceed if in browser environment
-    if (!this.isBrowser()) return null;
-    
-    const tokens = this.getTokensFromStorage();
-    
-    if (!tokens?.accessToken) {
-      return null;
-    }
-    
-    try {
-      // Decode our mock token (base64 encoded JSON)
-      const decoded = JSON.parse(atob(tokens.accessToken));
-      return decoded.user;
-    } catch (error) {
-      return null;
-    }
-  }
-  
-  public async validateAndRefreshToken(): Promise<boolean> {
-    // Only proceed if in browser environment
-    if (!this.isBrowser()) return false;
-    
-    try {
-      const tokens = this.getTokensFromStorage();
-      if (!tokens?.accessToken) {
-        return false;
-      }
-      
-      let isValid = false;
-      
-      try {
-        // Decode our mock token (base64 encoded JSON)
-        const decoded = JSON.parse(atob(tokens.accessToken));
-        const currentTime = Math.floor(Date.now() / 1000);
         
-        isValid = decoded.exp > currentTime;
-      } catch (e) {
-        return false;
+        return Promise.reject(error);
       }
-      
-      // If token is expired or about to expire, refresh it
-      if (!isValid && tokens.refreshToken) {
-        const newTokens = await this.refreshToken(tokens.refreshToken);
-        return !!newTokens;
-      }
-      
-      return isValid;
-    } catch (error) {
-      return false;
+    );
+  }
+  
+  // Save tokens to storage with cross-domain support
+  saveTokensToStorage(response: AuthResponse): void {
+    // Get the current domain
+    const currentDomain = window.location.hostname;
+    // Extract the base domain (for cross-domain cookie sharing)
+    const baseDomain = this.getBaseDomain(currentDomain);
+    
+    // Set cookies with appropriate domain
+    const cookieOptions = { 
+      domain: baseDomain, 
+      secure: true,
+      sameSite: 'lax' as 'lax' // TypeScript needs this type assertion
+    };
+    
+    console.log('Saving tokens with domain:', baseDomain);
+    
+    // Store tokens in cookies
+    Cookies.set('accessToken', response.accessToken, cookieOptions);
+    Cookies.set('refreshToken', response.refreshToken, cookieOptions);
+    
+    // Store user data in localStorage (no domain restrictions)
+    if (response.user) {
+      localStorage.setItem('userData', JSON.stringify(response.user));
     }
   }
   
-  // Token storage methods using cookies with dynamic domain detection
-  public saveTokensToStorage(authResponse: AuthResponse): void {
-    // Skip if not in browser environment
-    if (!this.isBrowser()) return;
+  // Helper to extract base domain for cookie sharing
+  private getBaseDomain(hostname: string): string | undefined {
+    // For Vercel deployments like mono-auth.vercel.app and mono-my-monorepo-2sn1.vercel.app
+    // We need to set domain to .vercel.app to share cookies
+    
+    // Check if it's a vercel app
+    if (hostname.endsWith('vercel.app')) {
+      return '.vercel.app';
+    }
+    
+    // For localhost development, return undefined (uses default)
+    if (hostname === 'localhost') {
+      return undefined;
+    }
+    
+    // For custom domains, extract the base domain
+    const parts = hostname.split('.');
+    if (parts.length > 2) {
+      // Return something like .example.com for subdomains
+      return `.${parts.slice(-2).join('.')}`;
+    }
+    
+    // Default fallback - return undefined to use the default behavior
+    return undefined;
+  }
+  
+  // Get tokens from storage
+  getTokensFromStorage(): { accessToken?: string; refreshToken?: string; userData: User | null } {
+    const accessToken = Cookies.get('accessToken');
+    const refreshToken = Cookies.get('refreshToken');
+    const userDataString = localStorage.getItem('userData');
+    const userData = userDataString ? JSON.parse(userDataString) : null;
+    
+    return {
+      accessToken,
+      refreshToken,
+      userData
+    };
+  }
+  
+  // Clear all tokens from storage
+  clearTokensFromStorage(): void {
+    // Get the current domain
+    const currentDomain = window.location.hostname;
+    // Extract the base domain
+    const baseDomain = this.getBaseDomain(currentDomain);
+    
+    const cookieOptions = { domain: baseDomain };
+    
+    // Clear cookies with the same domain setting
+    Cookies.remove('accessToken', cookieOptions);
+    Cookies.remove('refreshToken', cookieOptions);
+    
+    // Clear local storage
+    localStorage.removeItem('userData');
+  }
+  
+  // Get access token
+  getAccessToken(): string | undefined {
+    return Cookies.get('accessToken');
+  }
+  
+  // Get refresh token
+  getRefreshToken(): string | undefined {
+    return Cookies.get('refreshToken');
+  }
+  
+  // Get user data
+  getUserData(): User | null {
+    const userDataString = localStorage.getItem('userData');
+    return userDataString ? JSON.parse(userDataString) : null;
+  }
+  
+  // Set user data
+  setUserData(user: User | null): void {
+    if (user) {
+      localStorage.setItem('userData', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('userData');
+    }
+  }
+  
+  // Check if user is authenticated
+  isAuthenticated(): boolean {
+    return !!this.getAccessToken();
+  }
+  
+  // Login
+  async login(credentials: LoginCredentials): Promise<AuthResponse> {
+    try {
+      const response = await this.axiosInstance.post<AuthResponse>(
+        '/api/auth/login',
+        credentials
+      );
+      
+      // Save tokens to storage
+      this.saveTokensToStorage(response.data);
+      
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.message || 'Login failed');
+      }
+      throw new Error('Login failed');
+    }
+  }
+  
+  // Register
+  async register(credentials: RegisterCredentials): Promise<AuthResponse> {
+    try {
+      const response = await this.axiosInstance.post<AuthResponse>(
+        '/api/auth/register',
+        credentials
+      );
+      
+      // Save tokens to storage
+      this.saveTokensToStorage(response.data);
+      
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.message || 'Registration failed');
+      }
+      throw new Error('Registration failed');
+    }
+  }
+  
+  // Logout
+  async logout(): Promise<void> {
+    try {
+      // Call logout endpoint if available
+      await this.axiosInstance.post('/api/auth/logout');
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      // Always clear tokens from storage
+      this.clearTokensFromStorage();
+    }
+  }
+  
+  // Refresh token
+  async refreshToken(): Promise<AuthResponse> {
+    const refreshToken = this.getRefreshToken();
+    
+    if (!refreshToken) {
+      throw new Error('No refresh token available');
+    }
     
     try {
-      const tokenData = JSON.stringify({
-        accessToken: authResponse.accessToken,
-        refreshToken: authResponse.refreshToken,
+      const response = await axios.post<AuthResponse>(
+        `${this.apiUrl}/api/auth/refresh-token`,
+        { refreshToken },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      // Save the new tokens
+      this.saveTokensToStorage(response.data);
+      
+      return response.data;
+    } catch (error) {
+      // Clear tokens on refresh failure
+      this.clearTokensFromStorage();
+      
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.message || 'Token refresh failed');
+      }
+      throw new Error('Token refresh failed');
+    }
+  }
+  
+  // Get user profile
+  async getUserProfile(): Promise<User> {
+    try {
+      const response = await this.axiosInstance.get<User>('/api/auth/profile');
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.message || 'Failed to get user profile');
+      }
+      throw new Error('Failed to get user profile');
+    }
+  }
+  
+  // Update user profile
+  async updateUserProfile(userData: Partial<User>): Promise<User> {
+    try {
+      const response = await this.axiosInstance.put<User>('/api/auth/profile', userData);
+      
+      // Update stored user data
+      const currentUser = this.getUserData();
+      if (currentUser) {
+        this.setUserData({ ...currentUser, ...response.data });
+      }
+      
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.message || 'Failed to update user profile');
+      }
+      throw new Error('Failed to update user profile');
+    }
+  }
+  
+  // Change password
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    try {
+      await this.axiosInstance.post('/api/auth/change-password', {
+        currentPassword,
+        newPassword,
       });
-      
-      // Get dynamic cookie options
-      const cookieOptions = this.getCookieOptions();
-      
-      // Create the cookie string
-      let cookieStr = `${AuthService.TOKEN_STORAGE_KEY}=${encodeURIComponent(tokenData)}`;
-      
-      // Add cookie options
-      cookieStr += `; path=${cookieOptions.path}`;
-      cookieStr += `; domain=${cookieOptions.domain}`;
-      cookieStr += `; max-age=${cookieOptions.maxAge}`;
-      
-      if (cookieOptions.secure) {
-        cookieStr += '; secure';
-      }
-      
-      cookieStr += `; samesite=${cookieOptions.sameSite}`;
-      
-      // Set the cookie
-      document.cookie = cookieStr;
-      
-      // IMPORTANT: Also save to localStorage as a fallback
-      // This helps with cross-domain issues in Vercel
-      localStorage.setItem(`${AuthService.TOKEN_STORAGE_KEY}_fallback`, tokenData);
-      
-      console.log('Auth tokens saved to cookie and localStorage fallback');
-      console.log('Cookie options:', cookieOptions);
     } catch (error) {
-      console.error('Error saving auth tokens:', error);
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.message || 'Failed to change password');
+      }
+      throw new Error('Failed to change password');
     }
   }
   
-  public getTokensFromStorage(): { accessToken: string; refreshToken: string } | null {
-    // Skip if not in browser environment
-    if (!this.isBrowser()) return null;
-    
+  // Request password reset
+  async requestPasswordReset(email: string): Promise<void> {
     try {
-      // First try to get from cookies
-      const cookies = document.cookie.split(';');
-      const tokenCookie = cookies.find(c => c.trim().startsWith(`${AuthService.TOKEN_STORAGE_KEY}=`));
-      
-      if (tokenCookie) {
-        console.log('Auth token found in cookie');
-        const tokenValue = tokenCookie.split('=')[1].trim();
-        return JSON.parse(decodeURIComponent(tokenValue));
-      }
-      
-      // If cookie not found, try localStorage fallback
-      const fallbackToken = localStorage.getItem(`${AuthService.TOKEN_STORAGE_KEY}_fallback`);
-      if (fallbackToken) {
-        console.log('Auth token found in localStorage fallback');
-        return JSON.parse(fallbackToken);
-      }
-      
-      console.log('No auth token found in cookie or localStorage');
-      return null;
+      await axios.post(
+        `${this.apiUrl}/api/auth/request-password-reset`,
+        { email },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
     } catch (error) {
-      console.error('Error parsing auth token:', error);
-      return null;
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.message || 'Failed to request password reset');
+      }
+      throw new Error('Failed to request password reset');
     }
   }
   
-  public clearTokensFromStorage(): void {
-    // Skip if not in browser environment
-    if (!this.isBrowser()) return;
-    
+  // Reset password
+  async resetPassword(token: string, newPassword: string): Promise<void> {
     try {
-      // Clear cookie
-      const cookieOptions = this.getCookieOptions();
-      let cookieStr = `${AuthService.TOKEN_STORAGE_KEY}=`;
-      cookieStr += `; path=${cookieOptions.path}`;
-      cookieStr += `; domain=${cookieOptions.domain}`;
-      cookieStr += `; max-age=0`;
-      
-      if (cookieOptions.secure) {
-        cookieStr += '; secure';
-      }
-      
-      cookieStr += `; samesite=${cookieOptions.sameSite}`;
-      
-      document.cookie = cookieStr;
-      
-      // Also clear localStorage fallback
-      localStorage.removeItem(`${AuthService.TOKEN_STORAGE_KEY}_fallback`);
-      
-      console.log('Auth tokens cleared from cookie and localStorage');
+      await axios.post(
+        `${this.apiUrl}/api/auth/reset-password`,
+        { token, newPassword },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
     } catch (error) {
-      console.error('Error clearing auth tokens:', error);
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(error.response.data.message || 'Failed to reset password');
+      }
+      throw new Error('Failed to reset password');
     }
-  }
-  
-  // Method to get user profile from the token
-  public getUserProfile(): User | null {
-    // For POC, just return the user from the access token
-    return this.getCurrentUser();
   }
 }
+
+export default AuthService;

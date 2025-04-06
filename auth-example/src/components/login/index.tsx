@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Card, Form, Input, Typography, App } from 'antd';
+import { Button, Card, Form, Input, Typography, App, Spin } from 'antd';
 import { useLogin, useAuth, useAuthState } from '@my-monorepo/shell';
 import Link from 'next/link';
 
@@ -43,19 +43,11 @@ export default function Login() {
           console.log('Authentication state for redirect:', state ? 'STATE EXISTS' : 'NO STATE');
           
           if (state && state.accessToken && state.refreshToken) {
-            // CRITICAL: Log what's actually in the state
-            console.log('Token data available:', {
-              accessTokenLength: state.accessToken.length,
-              refreshTokenLength: state.refreshToken.length,
-              hasUser: !!state.user
-            });
-            
             try {
               // Include tokens and minimal user data
               const tokenData = encodeURIComponent(JSON.stringify({
                 accessToken: state.accessToken,
                 refreshToken: state.refreshToken,
-                // Include minimal user data - IMPORTANT for your current setup
                 userData: state.user ? {
                   id: state.user.id,
                   name: state.user.name,
@@ -66,15 +58,13 @@ export default function Login() {
               
               console.log('Created token for redirect, length:', tokenData.length);
               
-              // IMPORTANT: Use the home route instead of dashboard directly
-              // This allows your token-handling logic in Home component to run
-              const baseUrl = returnUrl.split('/dashboard')[0]; // Get base URL without /dashboard
-              const separator = baseUrl.includes('?') ? '&' : '?';
-              const redirectUrl = `${baseUrl}${separator}authToken=${tokenData}`;
+              // Add authToken to the return URL
+              const separator = returnUrl.includes('?') ? '&' : '?';
+              const redirectUrl = `${returnUrl}${separator}authToken=${tokenData}`;
               
               console.log('Redirecting to:', redirectUrl.substring(0, 100) + '...');
               
-              // Add a small delay to ensure the log is visible and cookies are set
+              // Redirect with a small delay
               setTimeout(() => {
                 window.location.href = redirectUrl;
               }, 500);
@@ -87,10 +77,9 @@ export default function Login() {
             console.warn('Missing tokens in state for redirect');
           }
           
-          // Fallback - redirect without token (still try to go to home rather than dashboard)
-          const baseUrl = returnUrl.split('/dashboard')[0];
-          console.warn('Redirect fallback - no token available, going to:', baseUrl);
-          window.location.href = baseUrl;
+          // Fallback - redirect without token
+          console.warn('Redirect fallback - no token available, going to:', returnUrl);
+          window.location.href = returnUrl;
         } else {
           // Same domain redirect
           window.location.href = returnUrl;
@@ -114,17 +103,13 @@ export default function Login() {
       const response = await login(values);
       message.success('Login successful!');
       
-      // After successful login, check if returnUrl is cross-domain
+      // After successful login, check if returnUrl is provided
       if (returnUrl) {
+        // Check if returnUrl is cross-domain
         if (!returnUrl.startsWith(window.location.origin)) {
           console.log('Login successful, preparing cross-domain redirect');
-          console.log('Login response contains tokens:', {
-            hasAccessToken: !!response.accessToken,
-            hasRefreshToken: !!response.refreshToken,
-            hasUser: !!response.user
-          });
           
-          // For cross-domain redirects, use minimal token data but include basic user info
+          // For cross-domain redirects, include token data
           const tokenData = encodeURIComponent(JSON.stringify({
             accessToken: response.accessToken,
             refreshToken: response.refreshToken,
@@ -136,21 +121,18 @@ export default function Login() {
             } : null
           }));
           
-          console.log('Created token for redirect, length:', tokenData.length);
-          
-          // IMPORTANT: Redirect to home page instead of dashboard directly
-          const baseUrl = returnUrl.split('/dashboard')[0]; // Get base URL without /dashboard
-          const separator = baseUrl.includes('?') ? '&' : '?';
-          const redirectUrl = `${baseUrl}${separator}authToken=${tokenData}`;
+          // Add authToken to the return URL
+          const separator = returnUrl.includes('?') ? '&' : '?';
+          const redirectUrl = `${returnUrl}${separator}authToken=${tokenData}`;
           
           console.log('Redirecting to:', redirectUrl.substring(0, 100) + '...');
           
-          // Add small delay to ensure cookies are set
+          // Add small delay and redirect
           setTimeout(() => {
             window.location.href = redirectUrl;
           }, 500);
           
-          return; // Important: prevent further execution
+          return; // Prevent further execution
         } else {
           // Same domain redirect
           window.location.href = returnUrl;
@@ -169,7 +151,18 @@ export default function Login() {
   };
 
   if (isAuthenticated && !isLogout) {
-    return <div>Redirecting...</div>;
+    return (
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh' 
+      }}>
+        <Spin size="large" />
+        <div style={{ marginTop: 16 }}>Redirecting to application...</div>
+      </div>
+    );
   }
 
   return (

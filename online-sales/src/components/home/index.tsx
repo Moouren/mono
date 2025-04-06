@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState, useAuth, AuthService } from '@my-monorepo/shell';
-import { App } from 'antd';
+import { App, Spin } from 'antd';
 
 // URL of the auth app login page
 const AUTH_APP_LOGIN_URL = `${process.env.NEXT_PUBLIC_AUTH_URL}/login`;
@@ -11,8 +11,9 @@ const AUTH_APP_LOGIN_URL = `${process.env.NEXT_PUBLIC_AUTH_URL}/login`;
 export default function Home() {
   const router = useRouter();
   const { message } = App.useApp();
-  const { isAuthenticated, loading, user, ...rest } = useAuthState();
+  const { isAuthenticated, loading, user } = useAuthState();
   const { setRedirectAfterLogin, setUser } = useAuth();
+  const [processingToken, setProcessingToken] = useState(false);
   
   console.log('Home component - Authentication state:', {isAuthenticated, user, loading});
   
@@ -20,13 +21,11 @@ export default function Home() {
     // First, check if there's a token in the URL
     const params = new URLSearchParams(window.location.search);
     const authToken = params.get('authToken');
-    console.log('URL search params:', params.toString());
-    console.log('Auth token present:', !!authToken);
     
     if (authToken) {
       try {
-        console.log('Found auth token in URL, length:', authToken.length);
-        console.log('First 50 chars:', authToken.substring(0, 50));
+        setProcessingToken(true);
+        console.log('Found auth token in URL, processing...');
         
         // Decode the token data
         const decodedToken = decodeURIComponent(authToken);
@@ -40,10 +39,10 @@ export default function Home() {
             hasUserData: !!tokenData.userData
           });
           
-          // Create auth service instance just for saving the token
+          // Create auth service instance for saving the token
           const tempAuthService = new AuthService(process.env.NEXT_PUBLIC_API_URL || '');
           
-          // Save the token to cookie for this domain
+          // Save the token to cookie 
           tempAuthService.saveTokensToStorage({
             accessToken: tokenData.accessToken,
             refreshToken: tokenData.refreshToken,
@@ -59,23 +58,28 @@ export default function Home() {
           const cleanUrl = window.location.pathname;
           window.history.replaceState({}, document.title, cleanUrl);
           
-          console.log('Token saved, reloading page...');
-          // Reload to apply auth state
-          window.location.reload();
-          return; // Exit early since we're reloading
+          console.log('Token saved, redirecting to dashboard...');
+          
+          // Give a moment for the cookie to be properly set
+          setTimeout(() => {
+            router.push('/dashboard');
+            setProcessingToken(false);
+          }, 500);
+          
+          return; // Exit early
         } catch (parseError) {
           console.error('Error parsing token JSON:', parseError);
           console.error('Token that failed to parse:', decodedToken.substring(0, 100) + '...');
+          setProcessingToken(false);
           throw parseError;
         }
       } catch (error) {
         console.error('Failed to process auth token:', error);
         message.error('Authentication error');
+        setProcessingToken(false);
       }
-    }
-    
-    // Normal auth flow if no token in URL
-    if (!loading) {
+    } else if (!loading) {
+      // Normal auth flow if no token in URL and not still loading
       if (isAuthenticated && user) {
         // User is authenticated, redirect to dashboard
         console.log('User is authenticated, redirecting to dashboard');
@@ -87,10 +91,10 @@ export default function Home() {
         const currentAppUrl = window.location.origin;
         
         // Store redirect URL before going to login page
-        setRedirectAfterLogin(currentAppUrl + '/dashboard');
+        setRedirectAfterLogin(currentAppUrl);
         
         // Add returnUrl parameter to help auth app know where to redirect back
-        const loginUrl = `${AUTH_APP_LOGIN_URL}?returnUrl=${encodeURIComponent(currentAppUrl + '/dashboard')}`;
+        const loginUrl = `${AUTH_APP_LOGIN_URL}?returnUrl=${encodeURIComponent(currentAppUrl)}`;
         
         console.log('Redirecting to login page:', loginUrl);
         // Redirect to auth app
@@ -99,15 +103,21 @@ export default function Home() {
     }
   }, [isAuthenticated, loading, router, user, message, setRedirectAfterLogin, setUser]);
 
-  // Show loading state while checking auth
+  // Show loading state
   return (
     <div style={{ 
       display: 'flex', 
+      flexDirection: 'column',
       justifyContent: 'center', 
       alignItems: 'center', 
       height: '100vh' 
     }}>
-      {loading ? 'Checking authentication status...' : 'Redirecting to login...'}
+      <Spin size="large" />
+      <div style={{ marginTop: 16 }}>
+        {processingToken ? 'Processing authentication...' : 
+         loading ? 'Checking authentication status...' : 
+         'Redirecting to login...'}
+      </div>
     </div>
   );
 }
