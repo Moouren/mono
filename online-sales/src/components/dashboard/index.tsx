@@ -57,7 +57,7 @@ export default function Dashboard() {
       localStorage.removeItem('redirectUrl'); // Clear any stored redirect URLs
       
       // Force a hard redirect to auth app login
-      window.location.href = 'http://localhost:3001/login?logout=true';
+      window.location.href = `${process.env.NEXT_PUBLIC_AUTH_URL}/login?logout=true`;
     } catch (error) {
       console.log('eer',error)
       message.error('Logout failed',error);

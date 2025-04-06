@@ -6,7 +6,7 @@ import { App as AntApp } from 'antd';
 import { ReactNode } from 'react';
 
 // Initialize auth service
-const authService = new AuthService(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api');
+const authService = new AuthService(process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:3001/api');
 
 // Client-side only providers
 export default function ClientSideProviders({ 

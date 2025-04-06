@@ -6,7 +6,7 @@ import { useAuthState, useAuth } from '@my-monorepo/shell';
 import { App } from 'antd';
 
 // URL of the auth app login page
-const AUTH_APP_LOGIN_URL = 'http://localhost:3001/login';
+const AUTH_APP_LOGIN_URL = `${process.env.NEXT_PUBLIC_AUTH_URL}/login`;
 
 export default function Home() {
   const router = useRouter();
