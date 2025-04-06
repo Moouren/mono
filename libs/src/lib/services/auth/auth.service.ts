@@ -1,31 +1,7 @@
-// AuthService.ts
+// auth.service.ts
 import Cookies from 'js-cookie';
 import axios, { AxiosInstance } from 'axios';
-
-interface User {
-  id: string | number;
-  name: string;
-  email: string;
-  role?: string;
-  [key: string]: any;
-}
-
-interface AuthResponse {
-  accessToken: string;
-  refreshToken: string;
-  user: User | null;
-}
-
-interface LoginCredentials {
-  email: string;
-  password: string;
-}
-
-interface RegisterCredentials {
-  name: string;
-  email: string;
-  password: string;
-}
+import { AuthResponse, LoginCredentials, RegisterCredentials, User } from './types';
 
 export class AuthService {
   private apiUrl: string;
@@ -74,7 +50,7 @@ export class AuthService {
               throw new Error('No refresh token available');
             }
             
-            const response = await this.refreshToken();
+            const response = await this.refreshToken(refreshToken);
             
             // If refresh successful, retry the original request
             if (response.accessToken) {
@@ -146,16 +122,16 @@ export class AuthService {
   }
   
   // Get tokens from storage
-  getTokensFromStorage(): { accessToken?: string; refreshToken?: string; userData: User | null } {
+  getTokensFromStorage(): { accessToken?: string; refreshToken?: string; user?: User } {
     const accessToken = Cookies.get('accessToken');
     const refreshToken = Cookies.get('refreshToken');
     const userDataString = localStorage.getItem('userData');
-    const userData = userDataString ? JSON.parse(userDataString) : null;
+    const user = userDataString ? JSON.parse(userDataString) : null;
     
     return {
       accessToken,
       refreshToken,
-      userData
+      user
     };
   }
   
@@ -186,8 +162,8 @@ export class AuthService {
     return Cookies.get('refreshToken');
   }
   
-  // Get user data
-  getUserData(): User | null {
+  // Alias method to match your context expectations
+  getCurrentUser(): User | null {
     const userDataString = localStorage.getItem('userData');
     return userDataString ? JSON.parse(userDataString) : null;
   }
@@ -206,178 +182,100 @@ export class AuthService {
     return !!this.getAccessToken();
   }
   
-  // Login
+  // Simulated Login - no actual API call
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
-      const response = await this.axiosInstance.post<AuthResponse>(
-        '/api/auth/login',
-        credentials
-      );
+      console.log('Simulated login with credentials:', credentials);
+      
+      // Create a fake successful response
+      const response: AuthResponse = {
+        accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+        refreshToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+        user: {
+          id: "12345",
+          name: credentials.email.split('@')[0] || "User",
+          email: credentials.email,
+          role: "user"
+        }
+      };
+      
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Save tokens to storage
-      this.saveTokensToStorage(response.data);
+      this.saveTokensToStorage(response);
       
-      return response.data;
+      return response;
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        throw new Error(error.response.data.message || 'Login failed');
-      }
       throw new Error('Login failed');
     }
   }
   
-  // Register
+  // Simulated Register - no actual API call
   async register(credentials: RegisterCredentials): Promise<AuthResponse> {
     try {
-      const response = await this.axiosInstance.post<AuthResponse>(
-        '/api/auth/register',
-        credentials
-      );
+      console.log('Simulated register with credentials:', credentials);
+      
+      // Create a fake successful response
+      const response: AuthResponse = {
+        accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IlNpbXVsYXRlZCBVc2VyIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE3MDI1NTYwMDB9.aStUV4tYyF0Wo0K7H8jQeW4LRC_4L4K15s5J-Bwz7WQ",
+        refreshToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IlNpbXVsYXRlZCBVc2VyIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE3MDI1NTYwMDB9.bRtUV4sYoF0Wo0K7H8jQeW4LRC_4L4K15s5J-Bwz7WQ",
+        user: {
+          id: "12345",
+          name: credentials.name,
+          email: credentials.email,
+          role: "user"
+        }
+      };
+      
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Save tokens to storage
-      this.saveTokensToStorage(response.data);
+      this.saveTokensToStorage(response);
       
-      return response.data;
+      return response;
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        throw new Error(error.response.data.message || 'Registration failed');
-      }
       throw new Error('Registration failed');
     }
   }
   
-  // Logout
+  // Simulated Logout - no actual API call
   async logout(): Promise<void> {
-    try {
-      // Call logout endpoint if available
-      await this.axiosInstance.post('/api/auth/logout');
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      // Always clear tokens from storage
-      this.clearTokensFromStorage();
-    }
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Clear tokens from storage
+    this.clearTokensFromStorage();
   }
   
-  // Refresh token
-  async refreshToken(): Promise<AuthResponse> {
-    const refreshToken = this.getRefreshToken();
-    
+  // Simulated Refresh Token - no actual API call
+  async refreshToken(refreshToken: string): Promise<AuthResponse> {
     if (!refreshToken) {
-      throw new Error('No refresh token available');
+      throw new Error('No refresh token provided');
     }
     
     try {
-      const response = await axios.post<AuthResponse>(
-        `${this.apiUrl}/api/auth/refresh-token`,
-        { refreshToken },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      console.log('Simulated token refresh');
+      
+      // Create a fake successful response with a new access token
+      const response: AuthResponse = {
+        accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IlNpbXVsYXRlZCBVc2VyIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE3MDI1NTYwMDB9.cStUV4tYyF0Wo0K7H8jQeW4LRC_4L4K15s5J-Bwz7WQ",
+        refreshToken: refreshToken, // Keep the same refresh token
+        user: this.getCurrentUser() // Keep the same user
+      };
+      
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 300));
       
       // Save the new tokens
-      this.saveTokensToStorage(response.data);
+      this.saveTokensToStorage(response);
       
-      return response.data;
+      return response;
     } catch (error) {
       // Clear tokens on refresh failure
       this.clearTokensFromStorage();
-      
-      if (axios.isAxiosError(error) && error.response) {
-        throw new Error(error.response.data.message || 'Token refresh failed');
-      }
       throw new Error('Token refresh failed');
-    }
-  }
-  
-  // Get user profile
-  async getUserProfile(): Promise<User> {
-    try {
-      const response = await this.axiosInstance.get<User>('/api/auth/profile');
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        throw new Error(error.response.data.message || 'Failed to get user profile');
-      }
-      throw new Error('Failed to get user profile');
-    }
-  }
-  
-  // Update user profile
-  async updateUserProfile(userData: Partial<User>): Promise<User> {
-    try {
-      const response = await this.axiosInstance.put<User>('/api/auth/profile', userData);
-      
-      // Update stored user data
-      const currentUser = this.getUserData();
-      if (currentUser) {
-        this.setUserData({ ...currentUser, ...response.data });
-      }
-      
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        throw new Error(error.response.data.message || 'Failed to update user profile');
-      }
-      throw new Error('Failed to update user profile');
-    }
-  }
-  
-  // Change password
-  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
-    try {
-      await this.axiosInstance.post('/api/auth/change-password', {
-        currentPassword,
-        newPassword,
-      });
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        throw new Error(error.response.data.message || 'Failed to change password');
-      }
-      throw new Error('Failed to change password');
-    }
-  }
-  
-  // Request password reset
-  async requestPasswordReset(email: string): Promise<void> {
-    try {
-      await axios.post(
-        `${this.apiUrl}/api/auth/request-password-reset`,
-        { email },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        throw new Error(error.response.data.message || 'Failed to request password reset');
-      }
-      throw new Error('Failed to request password reset');
-    }
-  }
-  
-  // Reset password
-  async resetPassword(token: string, newPassword: string): Promise<void> {
-    try {
-      await axios.post(
-        `${this.apiUrl}/api/auth/reset-password`,
-        { token, newPassword },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        throw new Error(error.response.data.message || 'Failed to reset password');
-      }
-      throw new Error('Failed to reset password');
     }
   }
 }

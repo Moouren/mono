@@ -21,7 +21,8 @@ import {
   LogoutOutlined,
   DollarOutlined,
   BarChartOutlined,
-  RiseOutlined
+  RiseOutlined,
+  LoadingOutlined
 } from '@ant-design/icons';
 import { useAuthState, useLogout, AuthService, useAuth } from '@my-monorepo/shell';
 import { useRouter } from 'next/navigation';
@@ -30,7 +31,7 @@ import type { MenuProps } from 'antd';
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
 
-// You would replace this with your actual data
+// Sample order data for demonstration
 const orderData = [
   { id: 1, customer: 'John Doe', status: 'Completed', total: 125.99, date: '2025-04-01' },
   { id: 2, customer: 'Jane Smith', status: 'Processing', total: 89.50, date: '2025-04-02' }
@@ -47,22 +48,24 @@ const columns = [
 
 export default function Dashboard() {
   const router = useRouter();
-  const { user, isAuthenticated, loading } = useAuthState();
+  const { isAuthenticated, user, loading } = useAuthState();
   const { logout } = useLogout();
   const { setUser } = useAuth();
   const { message } = App.useApp();
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [processingToken, setProcessingToken] = useState(false);
   
-  console.log('Dashboard auth state:', { isAuthenticated, user, loading });
+  console.log('Dashboard - Auth state:', { isAuthenticated, user, loading });
   
-  // First, check for auth token in URL
+  // First, check for auth token in URL (for cases when redirected directly to dashboard)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const authToken = params.get('authToken');
     
     if (authToken) {
+      setProcessingToken(true);
       try {
-        console.log('Auth token found in dashboard, processing...');
+        console.log('Auth token found in dashboard URL, processing...');
         
         // Process the token
         const decodedToken = decodeURIComponent(authToken);
@@ -87,34 +90,34 @@ export default function Dashboard() {
         window.history.replaceState({}, document.title, window.location.pathname);
         
         console.log('Token saved successfully in dashboard');
+        setProcessingToken(false);
+        
+        // Reload to apply auth state
         window.location.reload();
         return;
       } catch (error) {
         console.error('Failed to process auth token in dashboard:', error);
         message.error('Authentication error in dashboard');
+        setProcessingToken(false);
       }
     }
     
-    // Set a timeout to detect if authentication is taking too long
-    const authCheckTimeout = setTimeout(() => {
-      setIsCheckingAuth(false);
-    }, 3000); // 3 seconds timeout
-    
-    return () => clearTimeout(authCheckTimeout);
+    // Mark auth as checked
+    setAuthChecked(true);
   }, [message, setUser]);
   
   // Handle auth state for redirect
   useEffect(() => {
-    if (!loading) {
-      setIsCheckingAuth(false);
+    if (authChecked && !loading && !isAuthenticated) {
+      // If not authenticated and we've checked for tokens, redirect to home
+      console.log('Not authenticated in dashboard, redirecting to home...');
       
-      if (!isAuthenticated) {
-        // If not authenticated, redirect to home page which will handle the auth flow
-        console.log('Not authenticated in dashboard, redirecting to home');
+      // Add a small delay to prevent redirect loops
+      setTimeout(() => {
         router.push('/');
-      }
+      }, 500);
     }
-  }, [isAuthenticated, loading, router]);
+  }, [authChecked, isAuthenticated, loading, router]);
 
   // Handle logout
   const handleLogout = async () => {
@@ -171,7 +174,7 @@ export default function Dashboard() {
   ];
 
   // Show loading or unauthorized message
-  if (loading || isCheckingAuth) {
+  if (loading || processingToken || !authChecked) {
     return (
       <div style={{ 
         display: 'flex', 
@@ -180,8 +183,10 @@ export default function Dashboard() {
         alignItems: 'center', 
         height: '100vh' 
       }}>
-        <Spin size="large" />
-        <div style={{ marginTop: 16 }}>Checking authentication status...</div>
+        <Spin indicator={<LoadingOutlined style={{ fontSize: 32 }} spin />} />
+        <div style={{ marginTop: 16 }}>
+          {processingToken ? 'Processing authentication...' : 'Loading dashboard...'}
+        </div>
       </div>
     );
   }
@@ -195,7 +200,7 @@ export default function Dashboard() {
         alignItems: 'center', 
         height: '100vh' 
       }}>
-        <div style={{ marginBottom: 16 }}>You are not authorized to view this page.</div>
+        <div style={{ marginBottom: 16 }}>You need to log in to view this page.</div>
         <Button type="primary" onClick={() => router.push('/')}>
           Go to Login
         </Button>
