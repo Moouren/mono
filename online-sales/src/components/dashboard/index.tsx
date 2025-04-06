@@ -25,7 +25,7 @@ import {
   LoadingOutlined
 } from '@ant-design/icons';
 import { useAuthState, useLogout, AuthService, useAuth } from '@my-monorepo/shell';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import type { MenuProps } from 'antd';
 
 const { Header, Content, Sider } = Layout;
@@ -48,6 +48,7 @@ const columns = [
 
 export default function Dashboard() {
   const router = useRouter();
+  const pathname = usePathname();
   const { isAuthenticated, user, loading } = useAuthState();
   const { logout } = useLogout();
   const { setUser } = useAuth();
@@ -147,27 +148,60 @@ export default function Dashboard() {
     }
   };
 
+  // Find the current active key based on pathname
+  const getActiveMenuKey = () => {
+    if (pathname === '/dashboard') return 'dashboard';
+    if (pathname === '/dashboard/orders') return 'orders';
+    if (pathname === '/dashboard/products') return 'products';
+    if (pathname === '/dashboard/customers') return 'customers';
+    return 'dashboard'; // Default to dashboard
+  };
+
+  // Handle menu item clicks
+  const handleMenuClick = ({ key }: { key: string }) => {
+    switch(key) {
+      case 'dashboard':
+        router.push('/dashboard');
+        break;
+      case 'orders':
+        router.push('/dashboard/orders');
+        break;
+      case 'products':
+        router.push('/dashboard/products');
+        break;
+      case 'customers':
+        router.push('/dashboard/customers');
+        break;
+      default:
+        router.push('/dashboard');
+    }
+  };
+
   // Define menu items
   const menuItems: MenuProps['items'] = [
     {
       key: 'dashboard',
       icon: <BarChartOutlined />,
       label: 'Dashboard',
+      onClick: () => router.push('/dashboard'),
     },
     {
       key: 'orders',
       icon: <ShoppingCartOutlined />,
       label: 'Orders',
+      onClick: () => router.push('/dashboard/orders'),
     },
     {
       key: 'products',
       icon: <ShoppingOutlined />,
       label: 'Products',
+      onClick: () => router.push('/dashboard/products'),
     },
     {
       key: 'customers',
       icon: <UserOutlined />,
       label: 'Customers',
+      onClick: () => router.push('/dashboard/customers'),
     }
   ];
 
@@ -215,9 +249,10 @@ export default function Dashboard() {
           <Sider width={200} style={{ background: '#fff' }}>
             <Menu
               mode="inline"
-              defaultSelectedKeys={['dashboard']}
+              selectedKeys={[getActiveMenuKey()]}
               style={{ height: '100%', borderRight: 0 }}
               items={menuItems}
+              onClick={handleMenuClick}
             />
           </Sider>
           <Layout style={{ padding: '24px' }}>
