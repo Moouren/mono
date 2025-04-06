@@ -105,7 +105,7 @@ export class AuthService {
   
   public async login(credentials: LoginCredentials): Promise<AuthResponse> {
     // In development/testing mode, use mock authentication
-    if (process.env.NODE_ENV !== 'production') {
+    
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, 800));
       
@@ -153,17 +153,17 @@ export class AuthService {
       }
       
       return response;
-    }
     
-    // For production, use the real API
-    const response = await this.api.post<AuthResponse>('/auth/login', credentials);
     
-    // Only save tokens if in browser environment
-    if (this.isBrowser()) {
-      this.saveTokensToStorage(response.data);
-    }
+    // // For production, use the real API
+    // const response = await this.api.post<AuthResponse>('/auth/login', credentials);
     
-    return response.data;
+    // // Only save tokens if in browser environment
+    // if (this.isBrowser()) {
+    //   this.saveTokensToStorage(response.data);
+    // }
+    
+    // return response.data;
   }
   
   public async register(credentials: RegisterCredentials): Promise<AuthResponse> {
