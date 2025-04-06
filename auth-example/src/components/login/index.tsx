@@ -41,6 +41,7 @@ export default function Login() {
         if (!returnUrl.startsWith(window.location.origin)) {
           // For cross-domain redirects, we need to include the auth token
           const state = rest.state;
+          console.log('state',state)
           if (state && state.accessToken && state.refreshToken) {
             const tokenData = encodeURIComponent(JSON.stringify({
               accessToken: state.accessToken,
