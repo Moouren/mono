@@ -47,7 +47,7 @@ export default function Login() {
               refreshToken: state.refreshToken,
               userData: state.user
             }));
-            
+            console.log('sss',tokenData)
             // Add token to URL and redirect
             const separator = returnUrl.includes('?') ? '&' : '?';
             window.location.href = `${returnUrl}${separator}authToken=${tokenData}`;
