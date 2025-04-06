@@ -167,7 +167,7 @@ export default function Dashboard() {
         router.push('/dashboard/orders');
         break;
       case 'products':
-        router.push('/dashboard/products');
+        router.push('/products');
         break;
       case 'customers':
         router.push('/dashboard/customers');
