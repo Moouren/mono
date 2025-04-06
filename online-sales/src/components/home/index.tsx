@@ -16,11 +16,12 @@ export default function Home() {
   const { setRedirectAfterLogin, setUser } = useAuth();
   const [processingToken, setProcessingToken] = useState(false);
   const [redirectAttempted, setRedirectAttempted] = useState(false);
+  const [forceAuth, setForceAuth] = useState(false);
   
-  console.log('Home component - Authentication state:', { isAuthenticated, user, loading });
+  console.log('Home component - Authentication state:', { isAuthenticated, user, loading, forceAuth });
   
+  // Handle the token from URL parameter
   useEffect(() => {
-    // First, check if there's a token in the URL
     const params = new URLSearchParams(window.location.search);
     const authToken = params.get('authToken');
     console.log('URL search params:', params.toString());
@@ -65,13 +66,16 @@ export default function Home() {
           const cleanUrl = window.location.pathname;
           window.history.replaceState({}, document.title, cleanUrl);
           
-          console.log('Token saved successfully, waiting to redirect...');
+          console.log('Token saved successfully, forcing authentication...');
+          
+          // IMPORTANT: Force authentication state to true and bypass normal redirect flow
+          setForceAuth(true);
           
           // Add a small delay to ensure tokens are saved properly
           setTimeout(() => {
             router.push('/dashboard');
             setProcessingToken(false);
-          }, 1500);
+          }, 1000);
           
           return; // Exit early to prevent the other logic from executing
         } catch (parseError) {
@@ -87,15 +91,24 @@ export default function Home() {
         setProcessingToken(false);
         setRedirectAttempted(true);
       }
-    } else if (!loading && !redirectAttempted) {
-      // Normal auth flow if no token in URL and not still loading
+    }
+  }, [message, router, setUser]);
+
+  // Handle normal authentication flow
+  useEffect(() => {
+    // Skip if we're processing a token or have forced auth
+    if (processingToken || forceAuth) {
+      return;
+    }
+    
+    if (!loading && !redirectAttempted) {
       if (isAuthenticated && user) {
         // User is authenticated, redirect to dashboard
         console.log('User is authenticated, redirecting to dashboard');
         router.push('/dashboard');
         message.success(`Welcome back, ${user.name}!`);
       } else {
-        // User is not authenticated, save current app URL and redirect to login
+        // User is not authenticated, redirect to login
         console.log('User is not authenticated, redirecting to login');
         setRedirectAttempted(true);
         const currentAppUrl = window.location.origin;
@@ -113,7 +126,7 @@ export default function Home() {
         }, 500);
       }
     }
-  }, [isAuthenticated, loading, router, user, message, setRedirectAfterLogin, setUser, redirectAttempted]);
+  }, [isAuthenticated, loading, router, user, message, setRedirectAfterLogin, redirectAttempted, processingToken, forceAuth]);
 
   // Show loading state
   return (
@@ -122,13 +135,24 @@ export default function Home() {
       flexDirection: 'column',
       justifyContent: 'center', 
       alignItems: 'center', 
-      height: '100vh' 
+      height: '100vh',
+      background: '#f0f2f5'
     }}>
-      <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
-      <div style={{ marginTop: 16 }}>
-        {processingToken ? 'Processing authentication...' : 
-         loading ? 'Checking authentication status...' : 
-         'Redirecting to login...'}
+      <div style={{ 
+        padding: '2rem',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+        borderRadius: '8px',
+        background: 'white',
+        textAlign: 'center',
+        minWidth: '300px'
+      }}>
+        <Spin indicator={<LoadingOutlined style={{ fontSize: 32, color: '#1890ff' }} spin />} />
+        <div style={{ marginTop: 24, fontSize: '16px', color: '#333' }}>
+          {processingToken ? 'Processing authentication...' : 
+           forceAuth ? 'Authenticated! Redirecting to dashboard...' :
+           loading ? 'Checking authentication status...' : 
+           'Redirecting to login...'}
+        </div>
       </div>
     </div>
   );
