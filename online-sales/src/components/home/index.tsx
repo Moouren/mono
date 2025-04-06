@@ -20,7 +20,7 @@ export default function Home() {
     // First, check if there's a token in the URL
     const params = new URLSearchParams(window.location.search);
     const authToken = params.get('authToken');
-    
+    console.log('authTokenauthToken',authToken)
     if (authToken) {
       try {
         console.log('Found auth token in URL, processing...');

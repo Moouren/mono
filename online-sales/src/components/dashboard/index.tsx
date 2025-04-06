@@ -1,4 +1,3 @@
-// apps/online-sales/app/dashboard/page.tsx
 'use client';
 
 import { useEffect } from 'react';
@@ -50,36 +49,56 @@ export default function Dashboard() {
     const params = new URLSearchParams(window.location.search);
     const authToken = params.get('authToken');
     
+    // Enhanced debugging
+    console.log('Search params available:', params.toString().length > 0);
+    
     if (authToken) {
       try {
-        console.log('Found auth token in URL, processing...');
-        // Decode the token data
-        const tokenData = JSON.parse(decodeURIComponent(authToken));
+        console.log('Auth token found, length:', authToken.length);
+        console.log('First 50 chars of token:', authToken.substring(0, 50));
         
-        // Create auth service instance just for saving the token
-        const tempAuthService = new AuthService(process.env.NEXT_PUBLIC_API_URL || '');
+        // Instead of trying to decode the entire URL at once, process it in parts
+        const decodedToken = decodeURIComponent(authToken);
         
-        // Save the token to cookie for this domain
-        tempAuthService.saveTokensToStorage({
-          accessToken: tokenData.accessToken,
-          refreshToken: tokenData.refreshToken,
-          user: tokenData.userData
-        });
-        
-        // If user data is included, set it in context
-        if (tokenData.userData) {
-          setUser(tokenData.userData);
+        // Parse the token data
+        try {
+          const tokenData = JSON.parse(decodedToken);
+          console.log('Token parsed successfully, accessToken present:', !!tokenData.accessToken);
+          
+          // Create auth service instance just for saving the token
+          const tempAuthService = new AuthService(process.env.NEXT_PUBLIC_API_URL || '');
+          
+          // Validate the token structure before saving
+          if (tokenData.accessToken && tokenData.refreshToken) {
+            // Save the token to cookie for this domain
+            tempAuthService.saveTokensToStorage({
+              accessToken: tokenData.accessToken,
+              refreshToken: tokenData.refreshToken,
+              user: tokenData.userData || null
+            });
+            
+            // If user data is included, set it in context
+            if (tokenData.userData) {
+              setUser(tokenData.userData);
+            }
+            
+            // Clean the URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+            console.log('Token saved successfully, reloading page');
+            // Reload to apply auth state
+            window.location.reload();
+          } else {
+            throw new Error('Invalid token structure');
+          }
+        } catch (parseError) {
+          console.error('Error parsing token JSON:', parseError);
+          console.log('Decoded but unparsable token:', decodedToken.substring(0, 100) + '...');
+          throw parseError;
         }
-        
-        // Clean the URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-        
-        console.log('Token saved, reloading page...');
-        // Reload to apply auth state
-        window.location.reload();
       } catch (error) {
         console.error('Failed to process auth token:', error);
-        message.error('Authentication error');
+        message.error('Authentication error: Token processing failed');
         router.push('/');
       }
     }
@@ -123,6 +142,16 @@ export default function Dashboard() {
       console.error('Logout error:', error);
       message.error('Logout failed');
     }
+  };
+
+  // Error handler for auth errors
+  const handleAuthError = (error: any) => {
+    console.error('Authentication error:', error);
+    message.error('Session expired or invalid. Please log in again.');
+    
+    // Redirect to auth app login
+    const returnUrl = encodeURIComponent(window.location.href);
+    window.location.href = `${process.env.NEXT_PUBLIC_AUTH_URL}/login?returnUrl=${returnUrl}`;
   };
 
   // Define menu items using the items API
@@ -194,7 +223,7 @@ export default function Dashboard() {
               <Card>
                 <Statistic
                   title="Total Sales"
-                  value={totalSales}
+                  value={''}
                   precision={2}
                   valueStyle={{ color: '#3f8600' }}
                   prefix={<DollarOutlined />}
@@ -206,7 +235,7 @@ export default function Dashboard() {
               <Card>
                 <Statistic
                   title="Completed Orders"
-                  value={completedOrders}
+                  value={''}
                   valueStyle={{ color: '#3f8600' }}
                   prefix={<ShoppingCartOutlined />}
                 />
@@ -216,7 +245,7 @@ export default function Dashboard() {
               <Card>
                 <Statistic
                   title="Processing Orders"
-                  value={processingOrders}
+                  value={''}
                   valueStyle={{ color: '#1890ff' }}
                   prefix={<RiseOutlined />}
                 />
@@ -226,7 +255,7 @@ export default function Dashboard() {
               <Card>
                 <Statistic
                   title="Pending Orders"
-                  value={pendingOrders}
+                  value={''}
                   valueStyle={{ color: '#faad14' }}
                   prefix={<ShoppingCartOutlined />}
                 />

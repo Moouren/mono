@@ -1,4 +1,3 @@
-// apps/auth-example/app/login/page.tsx
 'use client';
 
 import { useEffect } from 'react';
@@ -41,14 +40,24 @@ export default function Login() {
         if (!returnUrl.startsWith(window.location.origin)) {
           // For cross-domain redirects, we need to include the auth token
           const state = rest.state;
-          console.log('state',state)
+          console.log('Authentication state:', state);
+          
           if (state && state.accessToken && state.refreshToken) {
+            // Only include essential user data
+            const minimalUserData = state.user ? {
+              id: state.user.id,
+              name: state.user.name,
+              email: state.user.email
+            } : null;
+            
             const tokenData = encodeURIComponent(JSON.stringify({
               accessToken: state.accessToken,
               refreshToken: state.refreshToken,
-              userData: state.user
+              userData: minimalUserData
             }));
-            console.log('sss',tokenData)
+            
+            console.log('Token data length:', tokenData.length);
+            
             // Add token to URL and redirect
             const separator = returnUrl.includes('?') ? '&' : '?';
             window.location.href = `${returnUrl}${separator}authToken=${tokenData}`;
@@ -83,17 +92,26 @@ export default function Login() {
       if (returnUrl) {
         if (!returnUrl.startsWith(window.location.origin)) {
           // This is a cross-domain redirect - include the token in URL
+          // IMPORTANT: Only include essential data to keep URL shorter
+          const minimalUserData = response.user ? {
+            id: response.user.id,
+            name: response.user.name,
+            email: response.user.email
+          } : null;
+          
           const tokenData = encodeURIComponent(JSON.stringify({
             accessToken: response.accessToken,
             refreshToken: response.refreshToken,
-            userData: response.user // Include user data to avoid another decode
+            userData: minimalUserData
           }));
+          
+          console.log('Redirecting with token, length:', tokenData.length);
           
           // Add the token to the URL and redirect
           const separator = returnUrl.includes('?') ? '&' : '?';
           const redirectUrl = `${returnUrl}${separator}authToken=${tokenData}`;
           
-          console.log('Redirecting to:', redirectUrl);
+          console.log('Redirecting to:', redirectUrl.substring(0, 100) + '...');
           window.location.href = redirectUrl;
         } else {
           // Same domain redirect
