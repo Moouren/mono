@@ -48,6 +48,7 @@ export default function Dashboard() {
     // Check for token in URL
     const params = new URLSearchParams(window.location.search);
     const authToken = params.get('authToken');
+    console.log('authToken', authToken, params.toString());
     
     // Enhanced debugging
     console.log('Search params available:', params.toString().length > 0);
@@ -57,7 +58,7 @@ export default function Dashboard() {
         console.log('Auth token found, length:', authToken.length);
         console.log('First 50 chars of token:', authToken.substring(0, 50));
         
-        // Instead of trying to decode the entire URL at once, process it in parts
+        // Process the token
         const decodedToken = decodeURIComponent(authToken);
         
         // Parse the token data
@@ -70,17 +71,15 @@ export default function Dashboard() {
           
           // Validate the token structure before saving
           if (tokenData.accessToken && tokenData.refreshToken) {
-            // Save the token to cookie for this domain
-            tempAuthService.saveTokensToStorage({
+            // Create dummy response to match what saveTokensToStorage expects
+            const authResponse = {
               accessToken: tokenData.accessToken,
               refreshToken: tokenData.refreshToken,
-              user: tokenData.userData || null
-            });
+              user: null // We're not passing user data for POC
+            };
             
-            // If user data is included, set it in context
-            if (tokenData.userData) {
-              setUser(tokenData.userData);
-            }
+            // Save the token using your existing method
+            tempAuthService.saveTokensToStorage(authResponse);
             
             // Clean the URL
             window.history.replaceState({}, document.title, window.location.pathname);
@@ -142,16 +141,6 @@ export default function Dashboard() {
       console.error('Logout error:', error);
       message.error('Logout failed');
     }
-  };
-
-  // Error handler for auth errors
-  const handleAuthError = (error: any) => {
-    console.error('Authentication error:', error);
-    message.error('Session expired or invalid. Please log in again.');
-    
-    // Redirect to auth app login
-    const returnUrl = encodeURIComponent(window.location.href);
-    window.location.href = `${process.env.NEXT_PUBLIC_AUTH_URL}/login?returnUrl=${returnUrl}`;
   };
 
   // Define menu items using the items API

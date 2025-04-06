@@ -43,17 +43,10 @@ export default function Login() {
           console.log('Authentication state:', state);
           
           if (state && state.accessToken && state.refreshToken) {
-            // Only include essential user data
-            const minimalUserData = state.user ? {
-              id: state.user.id,
-              name: state.user.name,
-              email: state.user.email
-            } : null;
-            
+            // POC: Only include tokens - no user data to minimize token size
             const tokenData = encodeURIComponent(JSON.stringify({
               accessToken: state.accessToken,
-              refreshToken: state.refreshToken,
-              userData: minimalUserData
+              refreshToken: state.refreshToken
             }));
             
             console.log('Token data length:', tokenData.length);
@@ -91,21 +84,14 @@ export default function Login() {
       // After successful login, check if returnUrl is cross-domain
       if (returnUrl) {
         if (!returnUrl.startsWith(window.location.origin)) {
-          // This is a cross-domain redirect - include the token in URL
-          // IMPORTANT: Only include essential data to keep URL shorter
-          const minimalUserData = response.user ? {
-            id: response.user.id,
-            name: response.user.name,
-            email: response.user.email
-          } : null;
-          
+          // For cross-domain redirects, use minimal token data
+          // POC: Only include tokens - no user data to minimize token size
           const tokenData = encodeURIComponent(JSON.stringify({
             accessToken: response.accessToken,
-            refreshToken: response.refreshToken,
-            userData: minimalUserData
+            refreshToken: response.refreshToken
           }));
           
-          console.log('Redirecting with token, length:', tokenData.length);
+          console.log('Redirecting with minimal token, length:', tokenData.length);
           
           // Add the token to the URL and redirect
           const separator = returnUrl.includes('?') ? '&' : '?';

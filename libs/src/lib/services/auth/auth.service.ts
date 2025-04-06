@@ -14,15 +14,6 @@ export class AuthService {
   
   private readonly api: AxiosInstance;
   
-  // Cookie settings
-  private readonly cookieOptions = {
-    path: '/',
-    domain: 'localhost', // This allows sharing between all localhost subdomains
-    maxAge: 86400, // 1 day in seconds
-    secure: false, // Set to true in production with HTTPS
-    sameSite: 'lax', // Allows the cookie to be sent with cross-domain navigation
-  };
-  
   // Mock credentials for testing
   private mockUsers = [
     {
@@ -102,10 +93,70 @@ export class AuthService {
   private isBrowser(): boolean {
     return typeof window !== 'undefined' && typeof document !== 'undefined';
   }
+
+  // Get dynamic cookie options based on environment
+  private getCookieOptions(): {
+    path: string;
+    domain: string;
+    maxAge: number;
+    secure: boolean;
+    sameSite: string;
+  } {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    
+    // Base options
+    const options = {
+      path: '/',
+      domain: 'localhost', // Default for development
+      maxAge: 86400, // 1 day in seconds
+      secure: isHttps, // Only use secure flag with HTTPS
+      sameSite: 'lax' as 'lax' | 'strict' | 'none', // Type assertion for TypeScript
+    };
+    
+    // If in production, try to determine proper domain
+    if (isProduction && typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      
+      // Handle different production domain strategies
+      if (hostname !== 'localhost') {
+        // For Vercel deployments, get the base domain
+        if (hostname.includes('vercel.app')) {
+          // This should handle your "mono-my-monorepo-2sn1.vercel.app" domain
+          options.domain = hostname;
+        } else {
+          // For custom domains, try to extract root domain for multi-app setups
+          const domainParts = hostname.split('.');
+          
+          // If it's a subdomain (has at least 3 parts like app.example.com)
+          if (domainParts.length > 2) {
+            // Get the root domain (e.g., example.com)
+            options.domain = domainParts.slice(-2).join('.');
+          } else {
+            // Just use the full hostname
+            options.domain = hostname;
+          }
+        }
+        
+        // In production with HTTPS, use secure cookies
+        options.secure = isHttps;
+        
+        // For cross-domain cookie sharing in production
+        // Note: 'none' requires 'secure: true' and HTTPS
+        if (isHttps) {
+          options.sameSite = 'none';
+        }
+      }
+      
+      console.log('Using cookie domain:', options.domain);
+    }
+    
+    return options;
+  }
   
   public async login(credentials: LoginCredentials): Promise<AuthResponse> {
     // In development/testing mode, use mock authentication
-    
+    if (process.env.NODE_ENV !== 'production') {
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, 800));
       
@@ -153,17 +204,17 @@ export class AuthService {
       }
       
       return response;
+    }
     
+    // For production, use the real API
+    const response = await this.api.post<AuthResponse>('/auth/login', credentials);
     
-    // // For production, use the real API
-    // const response = await this.api.post<AuthResponse>('/auth/login', credentials);
+    // Only save tokens if in browser environment
+    if (this.isBrowser()) {
+      this.saveTokensToStorage(response.data);
+    }
     
-    // // Only save tokens if in browser environment
-    // if (this.isBrowser()) {
-    //   this.saveTokensToStorage(response.data);
-    // }
-    
-    // return response.data;
+    return response.data;
   }
   
   public async register(credentials: RegisterCredentials): Promise<AuthResponse> {
@@ -440,7 +491,7 @@ export class AuthService {
     }
   }
   
-  // Modified token storage methods using cookies instead of localStorage
+  // Updated token storage methods using cookies with dynamic domain detection
   public saveTokensToStorage(authResponse: AuthResponse): void {
     // Skip if not in browser environment
     if (!this.isBrowser()) return;
@@ -451,24 +502,27 @@ export class AuthService {
         refreshToken: authResponse.refreshToken,
       });
       
+      // Get dynamic cookie options
+      const cookieOptions = this.getCookieOptions();
+      
       // Create the cookie string
       let cookieStr = `${AuthService.TOKEN_STORAGE_KEY}=${encodeURIComponent(tokenData)}`;
       
       // Add cookie options
-      cookieStr += `; path=${this.cookieOptions.path}`;
-      cookieStr += `; domain=${this.cookieOptions.domain}`;
-      cookieStr += `; max-age=${this.cookieOptions.maxAge}`;
+      cookieStr += `; path=${cookieOptions.path}`;
+      cookieStr += `; domain=${cookieOptions.domain}`;
+      cookieStr += `; max-age=${cookieOptions.maxAge}`;
       
-      if (this.cookieOptions.secure) {
+      if (cookieOptions.secure) {
         cookieStr += '; secure';
       }
       
-      cookieStr += `; samesite=${this.cookieOptions.sameSite}`;
+      cookieStr += `; samesite=${cookieOptions.sameSite}`;
       
       // Set the cookie
       document.cookie = cookieStr;
       
-      console.log('Auth tokens saved to cookie');
+      console.log('Auth tokens saved to cookie with options:', cookieOptions);
     } catch (error) {
       console.error('Error saving auth tokens to cookie:', error);
     }
@@ -500,11 +554,46 @@ export class AuthService {
     if (!this.isBrowser()) return;
     
     try {
+      const cookieOptions = this.getCookieOptions();
+      
       // To delete a cookie, set its expiration to a past date
-      document.cookie = `${AuthService.TOKEN_STORAGE_KEY}=; path=${this.cookieOptions.path}; domain=${this.cookieOptions.domain}; max-age=0`;
-      console.log('Auth tokens cleared from cookie');
+      let cookieStr = `${AuthService.TOKEN_STORAGE_KEY}=`;
+      cookieStr += `; path=${cookieOptions.path}`;
+      cookieStr += `; domain=${cookieOptions.domain}`;
+      cookieStr += `; max-age=0`;
+      
+      if (cookieOptions.secure) {
+        cookieStr += '; secure';
+      }
+      
+      cookieStr += `; samesite=${cookieOptions.sameSite}`;
+      
+      document.cookie = cookieStr;
+      console.log('Auth tokens cleared from cookie with options:', cookieOptions);
     } catch (error) {
       console.error('Error clearing auth tokens from cookie:', error);
     }
+  }
+  
+  // Method to get user profile - will use the token to get data from the API
+  public async getUserProfile(): Promise<User | null> {
+    // First try to get from the access token
+    const user = this.getCurrentUser();
+    if (user) {
+      return user;
+    }
+    
+    // If that fails and we're in production, try to fetch from API
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        const response = await this.api.get<User>('/api/user/profile');
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+        return null;
+      }
+    }
+    
+    return null;
   }
 }
