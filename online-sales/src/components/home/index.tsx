@@ -15,13 +15,21 @@ export default function Home() {
   const { isAuthenticated, user, loading } = useAuthState();
   const { setRedirectAfterLogin, setUser } = useAuth();
   const [processingToken, setProcessingToken] = useState(false);
-  const [redirectAttempted, setRedirectAttempted] = useState(false);
-  const [forceAuth, setForceAuth] = useState(false);
   
-  console.log('Home component - Authentication state:', { isAuthenticated, user, loading, forceAuth });
+  // IMPORTANT: Check for token in localStorage to prevent redirect loops
+  const hasProcessedToken = typeof window !== 'undefined' && localStorage.getItem('token_processed') === 'true';
   
-  // Handle the token from URL parameter
+  console.log('Home component - Authentication state:', { isAuthenticated, user, loading, hasProcessedToken });
+  
   useEffect(() => {
+    // First, check if we've already processed a token
+    if (hasProcessedToken) {
+      console.log('Token already processed, skipping auth check');
+      router.push('/dashboard');
+      return;
+    }
+    
+    // Check if there's a token in the URL
     const params = new URLSearchParams(window.location.search);
     const authToken = params.get('authToken');
     console.log('URL search params:', params.toString());
@@ -66,10 +74,10 @@ export default function Home() {
           const cleanUrl = window.location.pathname;
           window.history.replaceState({}, document.title, cleanUrl);
           
-          console.log('Token saved successfully, forcing authentication...');
+          console.log('Token saved successfully, storing processed flag...');
           
-          // IMPORTANT: Force authentication state to true and bypass normal redirect flow
-          setForceAuth(true);
+          // Set a flag in localStorage to indicate we've processed the token
+          localStorage.setItem('token_processed', 'true');
           
           // Add a small delay to ensure tokens are saved properly
           setTimeout(() => {
@@ -77,40 +85,28 @@ export default function Home() {
             setProcessingToken(false);
           }, 1000);
           
-          return; // Exit early to prevent the other logic from executing
+          return; // Exit early
         } catch (parseError) {
           console.error('Error parsing token JSON:', parseError);
           console.error('Token that failed to parse:', decodedToken.substring(0, 100) + '...');
           setProcessingToken(false);
-          setRedirectAttempted(true);
           throw parseError;
         }
       } catch (error) {
         console.error('Failed to process auth token:', error);
         message.error('Authentication error');
         setProcessingToken(false);
-        setRedirectAttempted(true);
       }
-    }
-  }, [message, router, setUser]);
-
-  // Handle normal authentication flow
-  useEffect(() => {
-    // Skip if we're processing a token or have forced auth
-    if (processingToken || forceAuth) {
-      return;
-    }
-    
-    if (!loading && !redirectAttempted) {
+    } else if (!loading && !hasProcessedToken) {
+      // Check if authenticated with normal auth check (only if no token was processed)
       if (isAuthenticated && user) {
-        // User is authenticated, redirect to dashboard
+        // User is already authenticated, redirect to dashboard
         console.log('User is authenticated, redirecting to dashboard');
         router.push('/dashboard');
         message.success(`Welcome back, ${user.name}!`);
       } else {
         // User is not authenticated, redirect to login
         console.log('User is not authenticated, redirecting to login');
-        setRedirectAttempted(true);
         const currentAppUrl = window.location.origin;
         
         // Store redirect URL before going to login page
@@ -126,7 +122,7 @@ export default function Home() {
         }, 500);
       }
     }
-  }, [isAuthenticated, loading, router, user, message, setRedirectAfterLogin, redirectAttempted, processingToken, forceAuth]);
+  }, [isAuthenticated, loading, router, user, message, setRedirectAfterLogin, setUser, hasProcessedToken]);
 
   // Show loading state
   return (
@@ -148,8 +144,8 @@ export default function Home() {
       }}>
         <Spin indicator={<LoadingOutlined style={{ fontSize: 32, color: '#1890ff' }} spin />} />
         <div style={{ marginTop: 24, fontSize: '16px', color: '#333' }}>
-          {processingToken ? 'Processing authentication...' : 
-           forceAuth ? 'Authenticated! Redirecting to dashboard...' :
+          {hasProcessedToken ? 'Authentication confirmed, going to dashboard...' :
+           processingToken ? 'Processing authentication...' : 
            loading ? 'Checking authentication status...' : 
            'Redirecting to login...'}
         </div>
