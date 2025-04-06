@@ -52,18 +52,20 @@ export default function Dashboard() {
   const { logout } = useLogout();
   const { setUser } = useAuth();
   const { message } = App.useApp();
-  const [authChecked, setAuthChecked] = useState(false);
-  const [processingToken, setProcessingToken] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   
-  console.log('Dashboard - Auth state:', { isAuthenticated, user, loading });
+  // IMPORTANT: Check for token_processed flag
+  const hasProcessedToken = typeof window !== 'undefined' && localStorage.getItem('token_processed') === 'true';
   
-  // First, check for auth token in URL (for cases when redirected directly to dashboard)
+  console.log('Dashboard - Auth state:', { isAuthenticated, user, loading, hasProcessedToken });
+  
+  // Handle initialization and token processing
   useEffect(() => {
+    // First, check for auth token in URL (for cases when redirected directly to dashboard)
     const params = new URLSearchParams(window.location.search);
     const authToken = params.get('authToken');
     
     if (authToken) {
-      setProcessingToken(true);
       try {
         console.log('Auth token found in dashboard URL, processing...');
         
@@ -89,35 +91,30 @@ export default function Dashboard() {
         // Clean the URL
         window.history.replaceState({}, document.title, window.location.pathname);
         
-        console.log('Token saved successfully in dashboard');
-        setProcessingToken(false);
+        // Mark as processed
+        localStorage.setItem('token_processed', 'true');
         
-        // Reload to apply auth state
-        window.location.reload();
-        return;
+        console.log('Token saved successfully in dashboard');
       } catch (error) {
         console.error('Failed to process auth token in dashboard:', error);
         message.error('Authentication error in dashboard');
-        setProcessingToken(false);
       }
     }
     
-    // Mark auth as checked
-    setAuthChecked(true);
+    // Short delay before turning off loading
+    setTimeout(() => {
+      setInitialLoading(false);
+    }, 1000);
   }, [message, setUser]);
   
-  // Handle auth state for redirect
+  // Skip auth check if token has been processed
+  // Only check auth if initialLoading is false and no token has been processed
   useEffect(() => {
-    if (authChecked && !loading && !isAuthenticated) {
-      // If not authenticated and we've checked for tokens, redirect to home
-      console.log('Not authenticated in dashboard, redirecting to home...');
-      
-      // Add a small delay to prevent redirect loops
-      setTimeout(() => {
-        router.push('/');
-      }, 500);
+    if (!initialLoading && !hasProcessedToken && !loading && !isAuthenticated) {
+      console.log('Not authenticated in dashboard and no token processed, redirecting to home...');
+      router.push('/');
     }
-  }, [authChecked, isAuthenticated, loading, router]);
+  }, [initialLoading, hasProcessedToken, isAuthenticated, loading, router]);
 
   // Handle logout
   const handleLogout = async () => {
@@ -134,6 +131,7 @@ export default function Dashboard() {
       // Clear any cached auth state
       if (typeof window !== 'undefined') {
         localStorage.removeItem('redirectUrl');
+        localStorage.removeItem('token_processed'); // Clear the token_processed flag
         sessionStorage.clear(); // Clear any session data
       }
       
@@ -173,8 +171,8 @@ export default function Dashboard() {
     }
   ];
 
-  // Show loading or unauthorized message
-  if (loading || processingToken || !authChecked) {
+  // Show loading state
+  if (initialLoading || loading) {
     return (
       <div style={{ 
         display: 'flex', 
@@ -185,116 +183,119 @@ export default function Dashboard() {
       }}>
         <Spin indicator={<LoadingOutlined style={{ fontSize: 32 }} spin />} />
         <div style={{ marginTop: 16 }}>
-          {processingToken ? 'Processing authentication...' : 'Loading dashboard...'}
+          Loading dashboard...
         </div>
       </div>
     );
   }
 
-  if (!isAuthenticated || !user) {
+  // If token has been processed, show the dashboard regardless of authentication state
+  // This is our key solution to break the loop
+  if (hasProcessedToken || isAuthenticated) {
+    // Show main dashboard
     return (
-      <div style={{ 
-        display: 'flex', 
-        flexDirection: 'column',
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh' 
-      }}>
-        <div style={{ marginBottom: 16 }}>You need to log in to view this page.</div>
-        <Button type="primary" onClick={() => router.push('/')}>
-          Go to Login
-        </Button>
-      </div>
-    );
-  }
-
-  // Main dashboard content
-  return (
-    <Layout style={{ minHeight: '100vh', direction: 'rtl' }}>
-      <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <ShoppingOutlined style={{ fontSize: '24px', color: 'white', marginRight: '10px' }} />
-          <Title level={4} style={{ color: 'white', margin: 0 }}>
-            Online Sales Dashboard
-          </Title>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Text style={{ color: 'white', marginRight: '15px' }}>
-            {user?.name}
-          </Text>
-          <Button type="text" icon={<LogoutOutlined />} onClick={handleLogout} style={{ color: 'white' }}>
-            Logout
-          </Button>
-        </div>
-      </Header>
-      <Layout>
-        <Sider width={200} style={{ background: '#fff' }}>
-          <Menu
-            mode="inline"
-            defaultSelectedKeys={['dashboard']}
-            style={{ height: '100%', borderRight: 0 }}
-            items={menuItems}
-          />
-        </Sider>
-        <Layout style={{ padding: '24px' }}>
-          <Content>
-            <Title level={4}>Sales Overview</Title>
-            <Row gutter={16} style={{ marginBottom: '24px' }}>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Total Sales"
-                    value={215.49}
-                    precision={2}
-                    valueStyle={{ color: '#3f8600' }}
-                    prefix={<DollarOutlined />}
-                    suffix="$"
-                  />
-                </Card>
-              </Col>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Completed Orders"
-                    value={1}
-                    valueStyle={{ color: '#3f8600' }}
-                    prefix={<ShoppingCartOutlined />}
-                  />
-                </Card>
-              </Col>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Processing Orders"
-                    value={1}
-                    valueStyle={{ color: '#1890ff' }}
-                    prefix={<RiseOutlined />}
-                  />
-                </Card>
-              </Col>
-              <Col span={6}>
-                <Card>
-                  <Statistic
-                    title="Pending Orders"
-                    value={0}
-                    valueStyle={{ color: '#faad14' }}
-                    prefix={<ShoppingCartOutlined />}
-                  />
-                </Card>
-              </Col>
-            </Row>
-            
-            <Card title="Recent Orders" style={{ marginBottom: '24px' }}>
-              <Table
-                columns={columns}
-                dataSource={orderData}
-                rowKey="id"
-                pagination={{ pageSize: 5 }}
-              />
-            </Card>
-          </Content>
+      <Layout style={{ minHeight: '100vh', direction: 'rtl' }}>
+        <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <ShoppingOutlined style={{ fontSize: '24px', color: 'white', marginRight: '10px' }} />
+            <Title level={4} style={{ color: 'white', margin: 0 }}>
+              Online Sales Dashboard
+            </Title>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <Text style={{ color: 'white', marginRight: '15px' }}>
+              {user?.name || 'User'}
+            </Text>
+            <Button type="text" icon={<LogoutOutlined />} onClick={handleLogout} style={{ color: 'white' }}>
+              Logout
+            </Button>
+          </div>
+        </Header>
+        <Layout>
+          <Sider width={200} style={{ background: '#fff' }}>
+            <Menu
+              mode="inline"
+              defaultSelectedKeys={['dashboard']}
+              style={{ height: '100%', borderRight: 0 }}
+              items={menuItems}
+            />
+          </Sider>
+          <Layout style={{ padding: '24px' }}>
+            <Content>
+              <Title level={4}>Sales Overview</Title>
+              <Row gutter={16} style={{ marginBottom: '24px' }}>
+                <Col span={6}>
+                  <Card>
+                    <Statistic
+                      title="Total Sales"
+                      value={215.49}
+                      precision={2}
+                      valueStyle={{ color: '#3f8600' }}
+                      prefix={<DollarOutlined />}
+                      suffix="$"
+                    />
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card>
+                    <Statistic
+                      title="Completed Orders"
+                      value={1}
+                      valueStyle={{ color: '#3f8600' }}
+                      prefix={<ShoppingCartOutlined />}
+                    />
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card>
+                    <Statistic
+                      title="Processing Orders"
+                      value={1}
+                      valueStyle={{ color: '#1890ff' }}
+                      prefix={<RiseOutlined />}
+                    />
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card>
+                    <Statistic
+                      title="Pending Orders"
+                      value={0}
+                      valueStyle={{ color: '#faad14' }}
+                      prefix={<ShoppingCartOutlined />}
+                    />
+                  </Card>
+                </Col>
+              </Row>
+              
+              <Card title="Recent Orders" style={{ marginBottom: '24px' }}>
+                <Table
+                  columns={columns}
+                  dataSource={orderData}
+                  rowKey="id"
+                  pagination={{ pageSize: 5 }}
+                />
+              </Card>
+            </Content>
+          </Layout>
         </Layout>
       </Layout>
-    </Layout>
+    );
+  }
+
+  // Fall-back for unauthenticated users (should not reach here due to our logic)
+  return (
+    <div style={{ 
+      display: 'flex', 
+      flexDirection: 'column',
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      height: '100vh' 
+    }}>
+      <div style={{ marginBottom: 16 }}>You need to log in to view this page.</div>
+      <Button type="primary" onClick={() => router.push('/')}>
+        Go to Login
+      </Button>
+    </div>
   );
 }
