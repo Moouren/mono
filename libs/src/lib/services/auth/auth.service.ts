@@ -374,9 +374,14 @@ export class AuthService {
       // Set the cookie
       document.cookie = cookieStr;
       
-      console.log('Auth tokens saved to cookie with options:', cookieOptions);
+      // IMPORTANT: Also save to localStorage as a fallback
+      // This helps with cross-domain issues in Vercel
+      localStorage.setItem(`${AuthService.TOKEN_STORAGE_KEY}_fallback`, tokenData);
+      
+      console.log('Auth tokens saved to cookie and localStorage fallback');
+      console.log('Cookie options:', cookieOptions);
     } catch (error) {
-      console.error('Error saving auth tokens to cookie:', error);
+      console.error('Error saving auth tokens:', error);
     }
   }
   
@@ -385,18 +390,27 @@ export class AuthService {
     if (!this.isBrowser()) return null;
     
     try {
-      // Parse cookies
+      // First try to get from cookies
       const cookies = document.cookie.split(';');
       const tokenCookie = cookies.find(c => c.trim().startsWith(`${AuthService.TOKEN_STORAGE_KEY}=`));
       
-      if (!tokenCookie) {
-        return null;
+      if (tokenCookie) {
+        console.log('Auth token found in cookie');
+        const tokenValue = tokenCookie.split('=')[1].trim();
+        return JSON.parse(decodeURIComponent(tokenValue));
       }
       
-      const tokenValue = tokenCookie.split('=')[1].trim();
-      return JSON.parse(decodeURIComponent(tokenValue));
+      // If cookie not found, try localStorage fallback
+      const fallbackToken = localStorage.getItem(`${AuthService.TOKEN_STORAGE_KEY}_fallback`);
+      if (fallbackToken) {
+        console.log('Auth token found in localStorage fallback');
+        return JSON.parse(fallbackToken);
+      }
+      
+      console.log('No auth token found in cookie or localStorage');
+      return null;
     } catch (error) {
-      console.error('Error parsing auth token cookie:', error);
+      console.error('Error parsing auth token:', error);
       return null;
     }
   }
@@ -406,9 +420,8 @@ export class AuthService {
     if (!this.isBrowser()) return;
     
     try {
+      // Clear cookie
       const cookieOptions = this.getCookieOptions();
-      
-      // To delete a cookie, set its expiration to a past date
       let cookieStr = `${AuthService.TOKEN_STORAGE_KEY}=`;
       cookieStr += `; path=${cookieOptions.path}`;
       cookieStr += `; domain=${cookieOptions.domain}`;
@@ -421,9 +434,13 @@ export class AuthService {
       cookieStr += `; samesite=${cookieOptions.sameSite}`;
       
       document.cookie = cookieStr;
-      console.log('Auth tokens cleared from cookie with options:', cookieOptions);
+      
+      // Also clear localStorage fallback
+      localStorage.removeItem(`${AuthService.TOKEN_STORAGE_KEY}_fallback`);
+      
+      console.log('Auth tokens cleared from cookie and localStorage');
     } catch (error) {
-      console.error('Error clearing auth tokens from cookie:', error);
+      console.error('Error clearing auth tokens:', error);
     }
   }
   

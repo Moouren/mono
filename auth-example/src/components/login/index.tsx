@@ -40,24 +40,57 @@ export default function Login() {
         if (!returnUrl.startsWith(window.location.origin)) {
           // For cross-domain redirects, we need to include the auth token
           const state = rest.state;
-          console.log('Authentication state:', state);
+          console.log('Authentication state for redirect:', state ? 'STATE EXISTS' : 'NO STATE');
           
           if (state && state.accessToken && state.refreshToken) {
-            // POC: Only include tokens - no user data to minimize token size
-            const tokenData = encodeURIComponent(JSON.stringify({
-              accessToken: state.accessToken,
-              refreshToken: state.refreshToken
-            }));
+            // CRITICAL: Log what's actually in the state
+            console.log('Token data available:', {
+              accessTokenLength: state.accessToken.length,
+              refreshTokenLength: state.refreshToken.length,
+              hasUser: !!state.user
+            });
             
-            console.log('Token data length:', tokenData.length);
-            
-            // Add token to URL and redirect
-            const separator = returnUrl.includes('?') ? '&' : '?';
-            window.location.href = `${returnUrl}${separator}authToken=${tokenData}`;
+            try {
+              // Include tokens and minimal user data
+              const tokenData = encodeURIComponent(JSON.stringify({
+                accessToken: state.accessToken,
+                refreshToken: state.refreshToken,
+                // Include minimal user data - IMPORTANT for your current setup
+                userData: state.user ? {
+                  id: state.user.id,
+                  name: state.user.name,
+                  email: state.user.email,
+                  role: state.user.role
+                } : null
+              }));
+              
+              console.log('Created token for redirect, length:', tokenData.length);
+              
+              // IMPORTANT: Use the home route instead of dashboard directly
+              // This allows your token-handling logic in Home component to run
+              const baseUrl = returnUrl.split('/dashboard')[0]; // Get base URL without /dashboard
+              const separator = baseUrl.includes('?') ? '&' : '?';
+              const redirectUrl = `${baseUrl}${separator}authToken=${tokenData}`;
+              
+              console.log('Redirecting to:', redirectUrl.substring(0, 100) + '...');
+              
+              // Add a small delay to ensure the log is visible and cookies are set
+              setTimeout(() => {
+                window.location.href = redirectUrl;
+              }, 500);
+              
+              return; // Important: prevent further execution
+            } catch (error) {
+              console.error('Error creating redirect token:', error);
+            }
           } else {
-            // Just redirect normally if we don't have tokens
-            window.location.href = returnUrl;
+            console.warn('Missing tokens in state for redirect');
           }
+          
+          // Fallback - redirect without token (still try to go to home rather than dashboard)
+          const baseUrl = returnUrl.split('/dashboard')[0];
+          console.warn('Redirect fallback - no token available, going to:', baseUrl);
+          window.location.href = baseUrl;
         } else {
           // Same domain redirect
           window.location.href = returnUrl;
@@ -84,21 +117,40 @@ export default function Login() {
       // After successful login, check if returnUrl is cross-domain
       if (returnUrl) {
         if (!returnUrl.startsWith(window.location.origin)) {
-          // For cross-domain redirects, use minimal token data
-          // POC: Only include tokens - no user data to minimize token size
+          console.log('Login successful, preparing cross-domain redirect');
+          console.log('Login response contains tokens:', {
+            hasAccessToken: !!response.accessToken,
+            hasRefreshToken: !!response.refreshToken,
+            hasUser: !!response.user
+          });
+          
+          // For cross-domain redirects, use minimal token data but include basic user info
           const tokenData = encodeURIComponent(JSON.stringify({
             accessToken: response.accessToken,
-            refreshToken: response.refreshToken
+            refreshToken: response.refreshToken,
+            userData: response.user ? {
+              id: response.user.id,
+              name: response.user.name,
+              email: response.user.email,
+              role: response.user.role
+            } : null
           }));
           
-          console.log('Redirecting with minimal token, length:', tokenData.length);
+          console.log('Created token for redirect, length:', tokenData.length);
           
-          // Add the token to the URL and redirect
-          const separator = returnUrl.includes('?') ? '&' : '?';
-          const redirectUrl = `${returnUrl}${separator}authToken=${tokenData}`;
+          // IMPORTANT: Redirect to home page instead of dashboard directly
+          const baseUrl = returnUrl.split('/dashboard')[0]; // Get base URL without /dashboard
+          const separator = baseUrl.includes('?') ? '&' : '?';
+          const redirectUrl = `${baseUrl}${separator}authToken=${tokenData}`;
           
           console.log('Redirecting to:', redirectUrl.substring(0, 100) + '...');
-          window.location.href = redirectUrl;
+          
+          // Add small delay to ensure cookies are set
+          setTimeout(() => {
+            window.location.href = redirectUrl;
+          }, 500);
+          
+          return; // Important: prevent further execution
         } else {
           // Same domain redirect
           window.location.href = returnUrl;

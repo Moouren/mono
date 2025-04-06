@@ -41,17 +41,23 @@ export default function Dashboard() {
   const { setUser } = useAuth();
   const { message } = App.useApp();
   
-  console.log('Dashboard auth state:', { isAuthenticated, user });
+  console.log('Dashboard auth state:', { isAuthenticated, user, loading });
   
-  // First check for auth token in URL
+  // Debug auth state changes
+  useEffect(() => {
+    console.log('Auth state changed:', { isAuthenticated, user, loading });
+  }, [isAuthenticated, user, loading]);
+  
+  // Check for auth token in URL
   useEffect(() => {
     // Check for token in URL
     const params = new URLSearchParams(window.location.search);
     const authToken = params.get('authToken');
-    console.log('authToken', authToken, params.toString());
     
-    // Enhanced debugging
-    console.log('Search params available:', params.toString().length > 0);
+    // Debug logging
+    console.log('URL search:', window.location.search);
+    console.log('Params string:', params.toString());
+    console.log('Auth token present:', !!authToken);
     
     if (authToken) {
       try {
@@ -60,11 +66,16 @@ export default function Dashboard() {
         
         // Process the token
         const decodedToken = decodeURIComponent(authToken);
+        console.log('Token decoded, processing...');
         
         // Parse the token data
         try {
           const tokenData = JSON.parse(decodedToken);
-          console.log('Token parsed successfully, accessToken present:', !!tokenData.accessToken);
+          console.log('Token parsed successfully, contains:', {
+            hasAccessToken: !!tokenData.accessToken,
+            hasRefreshToken: !!tokenData.refreshToken,
+            hasUserData: !!tokenData.userData
+          });
           
           // Create auth service instance just for saving the token
           const tempAuthService = new AuthService(process.env.NEXT_PUBLIC_API_URL || '');
@@ -75,11 +86,17 @@ export default function Dashboard() {
             const authResponse = {
               accessToken: tokenData.accessToken,
               refreshToken: tokenData.refreshToken,
-              user: null // We're not passing user data for POC
+              user: tokenData.userData || null
             };
             
             // Save the token using your existing method
+            console.log('Saving tokens to storage...');
             tempAuthService.saveTokensToStorage(authResponse);
+            
+            // If user data is included, set it in context
+            if (tokenData.userData) {
+              setUser(tokenData.userData);
+            }
             
             // Clean the URL
             window.history.replaceState({}, document.title, window.location.pathname);
@@ -87,6 +104,7 @@ export default function Dashboard() {
             console.log('Token saved successfully, reloading page');
             // Reload to apply auth state
             window.location.reload();
+            return; // Important to prevent further execution
           } else {
             throw new Error('Invalid token structure');
           }
@@ -103,12 +121,14 @@ export default function Dashboard() {
     }
   }, [message, router, setUser]);
   
-  // Then handle auth state
+  // Handle auth state for redirect
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      // If not authenticated, redirect to home page which will handle the auth flow
-      console.log('Not authenticated, redirecting to home');
-      router.push('/');
+    if (!loading) {
+      if (!isAuthenticated) {
+        // If not authenticated, redirect to home page which will handle the auth flow
+        console.log('Not authenticated, redirecting to home');
+        router.push('/');
+      }
     }
   }, [isAuthenticated, loading, router]);
 
