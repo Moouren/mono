@@ -54,39 +54,6 @@ export class AuthService {
       },
       (error) => Promise.reject(error)
     );
-    
-    // Add interceptor for token refresh
-    this.api.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        const originalRequest = error.config;
-        
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          originalRequest._retry = true;
-          
-          try {
-            // Only run in browser environment
-            if (this.isBrowser()) {
-              const tokens = this.getTokensFromStorage();
-              if (tokens?.refreshToken) {
-                const newTokens = await this.refreshToken(tokens.refreshToken);
-                
-                if (newTokens) {
-                  // Update the request with the new token
-                  originalRequest.headers.Authorization = `Bearer ${newTokens.accessToken}`;
-                  return this.api(originalRequest);
-                }
-              }
-            }
-          } catch (refreshError) {
-            // If refresh fails, log out
-            this.logout();
-          }
-        }
-        
-        return Promise.reject(error);
-      }
-    );
   }
   
   // Helper method to check if we're in a browser environment
@@ -120,32 +87,11 @@ export class AuthService {
       
       // Handle different production domain strategies
       if (hostname !== 'localhost') {
-        // For Vercel deployments, get the base domain
-        if (hostname.includes('vercel.app')) {
-          // This should handle your "mono-my-monorepo-2sn1.vercel.app" domain
-          options.domain = hostname;
-        } else {
-          // For custom domains, try to extract root domain for multi-app setups
-          const domainParts = hostname.split('.');
-          
-          // If it's a subdomain (has at least 3 parts like app.example.com)
-          if (domainParts.length > 2) {
-            // Get the root domain (e.g., example.com)
-            options.domain = domainParts.slice(-2).join('.');
-          } else {
-            // Just use the full hostname
-            options.domain = hostname;
-          }
-        }
+        // For Vercel deployments, use the hostname directly
+        options.domain = hostname;
         
         // In production with HTTPS, use secure cookies
         options.secure = isHttps;
-        
-        // For cross-domain cookie sharing in production
-        // Note: 'none' requires 'secure: true' and HTTPS
-        if (isHttps) {
-          options.sameSite = 'none';
-        }
       }
       
       console.log('Using cookie domain:', options.domain);
@@ -155,160 +101,115 @@ export class AuthService {
   }
   
   public async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    // In development/testing mode, use mock authentication
-    if (process.env.NODE_ENV !== 'production') {
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      const user = this.mockUsers.find(u => u.email === credentials.email);
-      
-      if (!user || user.password !== credentials.password) {
-        throw new Error('Invalid email or password');
-      }
-      
-      // Create mock tokens with encoded user info
-      // In real app, these would be JWTs with proper expiration
-      const now = new Date();
-      const exp = new Date(now.getTime() + 30 * 60000); // 30 minutes
-      
-      // Create a simple mock token that contains user info and expiration
-      const tokenPayload = {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role
-        },
-        exp: Math.floor(exp.getTime() / 1000)
-      };
-      
-      // Base64 encode the token payload - this is just for mocking!
-      // Real JWT would be properly signed
-      const accessToken = btoa(JSON.stringify(tokenPayload));
-      const refreshToken = 'mock-refresh-token-' + user.id;
-      
-      const response: AuthResponse = {
-        accessToken,
-        refreshToken,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role
-        }
-      };
-      
-      // Only save tokens if in browser environment
-      if (this.isBrowser()) {
-        this.saveTokensToStorage(response);
-      }
-      
-      return response;
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    const user = this.mockUsers.find(u => u.email === credentials.email);
+    
+    if (!user || user.password !== credentials.password) {
+      throw new Error('Invalid email or password');
     }
     
-    // For production, use the real API
-    const response = await this.api.post<AuthResponse>('/auth/login', credentials);
+    // Create mock tokens with encoded user info
+    const now = new Date();
+    const exp = new Date(now.getTime() + 30 * 60000); // 30 minutes
     
-    // Only save tokens if in browser environment
+    // Create a simple mock token that contains user info and expiration
+    const tokenPayload = {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      },
+      exp: Math.floor(exp.getTime() / 1000)
+    };
+    
+    // Base64 encode the token payload - this is just for mocking!
+    const accessToken = btoa(JSON.stringify(tokenPayload));
+    const refreshToken = 'mock-refresh-token-' + user.id;
+    
+    const response: AuthResponse = {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      }
+    };
+    
+    // Save tokens if in browser environment
     if (this.isBrowser()) {
-      this.saveTokensToStorage(response.data);
+      this.saveTokensToStorage(response);
     }
     
-    return response.data;
+    return response;
   }
   
   public async register(credentials: RegisterCredentials): Promise<AuthResponse> {
-    // In development/testing mode, use mock registration
-    if (process.env.NODE_ENV !== 'production') {
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Check if user already exists
-      if (this.mockUsers.some(u => u.email === credentials.email)) {
-        throw new Error('User with this email already exists');
-      }
-      
-      // Create new mock user
-      const newUser = {
-        id: (this.mockUsers.length + 1).toString(),
-        email: credentials.email,
-        password: credentials.password,
-        name: credentials.name,
-        role: 'user'
-      };
-      
-      // Add to mock users (in real app this would persist to database)
-      this.mockUsers.push(newUser);
-      
-      // Create tokens like in the login method
-      const now = new Date();
-      const exp = new Date(now.getTime() + 30 * 60000); // 30 minutes
-      
-      const tokenPayload = {
-        user: {
-          id: newUser.id,
-          email: newUser.email,
-          name: newUser.name,
-          role: newUser.role
-        },
-        exp: Math.floor(exp.getTime() / 1000)
-      };
-      
-      const accessToken = btoa(JSON.stringify(tokenPayload));
-      const refreshToken = 'mock-refresh-token-' + newUser.id;
-      
-      const response: AuthResponse = {
-        accessToken,
-        refreshToken,
-        user: {
-          id: newUser.id,
-          email: newUser.email,
-          name: newUser.name,
-          role: newUser.role
-        }
-      };
-      
-      // Only save tokens if in browser environment
-      if (this.isBrowser()) {
-        this.saveTokensToStorage(response);
-      }
-      
-      return response;
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    // Check if user already exists
+    if (this.mockUsers.some(u => u.email === credentials.email)) {
+      throw new Error('User with this email already exists');
     }
     
-    // For production, use the real API
-    const response = await this.api.post<AuthResponse>('/auth/register', credentials);
+    // Create new mock user
+    const newUser = {
+      id: (this.mockUsers.length + 1).toString(),
+      email: credentials.email,
+      password: credentials.password,
+      name: credentials.name,
+      role: 'user'
+    };
     
-    // Only save tokens if in browser environment
+    // Add to mock users
+    this.mockUsers.push(newUser);
+    
+    // Create tokens like in the login method
+    const now = new Date();
+    const exp = new Date(now.getTime() + 30 * 60000); // 30 minutes
+    
+    const tokenPayload = {
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name,
+        role: newUser.role
+      },
+      exp: Math.floor(exp.getTime() / 1000)
+    };
+    
+    const accessToken = btoa(JSON.stringify(tokenPayload));
+    const refreshToken = 'mock-refresh-token-' + newUser.id;
+    
+    const response: AuthResponse = {
+      accessToken,
+      refreshToken,
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name,
+        role: newUser.role
+      }
+    };
+    
+    // Save tokens if in browser environment
     if (this.isBrowser()) {
-      this.saveTokensToStorage(response.data);
+      this.saveTokensToStorage(response);
     }
     
-    return response.data;
+    return response;
   }
   
   public async logout(): Promise<void> {
     // Only proceed if in browser environment
     if (!this.isBrowser()) return;
     
-    // In development/testing mode, simply clear storage
-    if (process.env.NODE_ENV !== 'production') {
-      this.clearTokensFromStorage();
-      return;
-    }
-    
-    // For production, call the API
-    const tokens = this.getTokensFromStorage();
-    
-    if (tokens?.refreshToken) {
-      try {
-        await this.api.post('/auth/logout', { refreshToken: tokens.refreshToken });
-      } catch (error) {
-        // Continue with logout even if API call fails
-        console.error('Logout API call failed:', error);
-      }
-    }
-    
+    // For POC just clear storage
     this.clearTokensFromStorage();
   }
   
@@ -316,68 +217,52 @@ export class AuthService {
     // Only proceed if in browser environment
     if (!this.isBrowser()) return null;
     
-    // In development/testing mode
-    if (process.env.NODE_ENV !== 'production') {
-      // Parse the existing token to get the user ID
-      const tokens = this.getTokensFromStorage();
-      if (!tokens?.accessToken) return null;
+    // Parse the existing token to get the user ID
+    const tokens = this.getTokensFromStorage();
+    if (!tokens?.accessToken) return null;
+    
+    try {
+      // Decode the mock token
+      const decoded = JSON.parse(atob(tokens.accessToken));
+      const userId = decoded.user.id;
       
-      try {
-        // Decode the mock token
-        const decoded = JSON.parse(atob(tokens.accessToken));
-        const userId = decoded.user.id;
-        
-        // Find the user
-        const user = this.mockUsers.find(u => u.id === userId);
-        if (!user) {
-          this.clearTokensFromStorage();
-          return null;
-        }
-        
-        // Create new tokens
-        const now = new Date();
-        const exp = new Date(now.getTime() + 30 * 60000); // 30 minutes
-        
-        const tokenPayload = {
-          user: {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role
-          },
-          exp: Math.floor(exp.getTime() / 1000)
-        };
-        
-        const newAccessToken = btoa(JSON.stringify(tokenPayload));
-        const newRefreshToken = 'mock-refresh-token-' + user.id;
-        
-        const response: AuthResponse = {
-          accessToken: newAccessToken,
-          refreshToken: newRefreshToken,
-          user: {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role
-          }
-        };
-        
-        this.saveTokensToStorage(response);
-        return response;
-      } catch (error) {
+      // Find the user
+      const user = this.mockUsers.find(u => u.id === userId);
+      if (!user) {
         this.clearTokensFromStorage();
         return null;
       }
-    }
-    
-    // For production
-    try {
-      const response = await this.api.post<AuthResponse>('/auth/refresh', {
-        refreshToken,
-      });
       
-      this.saveTokensToStorage(response.data);
-      return response.data;
+      // Create new tokens
+      const now = new Date();
+      const exp = new Date(now.getTime() + 30 * 60000); // 30 minutes
+      
+      const tokenPayload = {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role
+        },
+        exp: Math.floor(exp.getTime() / 1000)
+      };
+      
+      const newAccessToken = btoa(JSON.stringify(tokenPayload));
+      const newRefreshToken = 'mock-refresh-token-' + user.id;
+      
+      const response: AuthResponse = {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role
+        }
+      };
+      
+      this.saveTokensToStorage(response);
+      return response;
     } catch (error) {
       this.clearTokensFromStorage();
       return null;
@@ -395,24 +280,11 @@ export class AuthService {
     }
     
     try {
-      // For development/testing mode
-      if (process.env.NODE_ENV !== 'production') {
-        try {
-          // Decode our mock token (base64 encoded JSON)
-          const decoded = JSON.parse(atob(tokens.accessToken));
-          const currentTime = Math.floor(Date.now() / 1000);
-          
-          return decoded.exp > currentTime;
-        } catch (e) {
-          return false;
-        }
-      }
+      // Decode our mock token (base64 encoded JSON)
+      const decoded = JSON.parse(atob(tokens.accessToken));
+      const currentTime = Math.floor(Date.now() / 1000);
       
-      // For production, use jwtDecode
-      const decodedToken: { exp: number } = jwtDecode(tokens.accessToken);
-      const currentTime = Date.now() / 1000;
-      
-      return decodedToken.exp > currentTime;
+      return decoded.exp > currentTime;
     } catch (error) {
       return false;
     }
@@ -429,20 +301,9 @@ export class AuthService {
     }
     
     try {
-      // For development/testing mode
-      if (process.env.NODE_ENV !== 'production') {
-        try {
-          // Decode our mock token (base64 encoded JSON)
-          const decoded = JSON.parse(atob(tokens.accessToken));
-          return decoded.user;
-        } catch (e) {
-          return null;
-        }
-      }
-      
-      // For production, use jwtDecode
-      const decodedToken: { user: User } = jwtDecode(tokens.accessToken);
-      return decodedToken.user;
+      // Decode our mock token (base64 encoded JSON)
+      const decoded = JSON.parse(atob(tokens.accessToken));
+      return decoded.user;
     } catch (error) {
       return null;
     }
@@ -460,23 +321,14 @@ export class AuthService {
       
       let isValid = false;
       
-      // For development/testing mode
-      if (process.env.NODE_ENV !== 'production') {
-        try {
-          // Decode our mock token (base64 encoded JSON)
-          const decoded = JSON.parse(atob(tokens.accessToken));
-          const currentTime = Math.floor(Date.now() / 1000);
-          
-          isValid = decoded.exp > currentTime;
-        } catch (e) {
-          return false;
-        }
-      } else {
-        // Production code using jwtDecode
-        const decodedToken: { exp: number } = jwtDecode(tokens.accessToken);
-        const currentTime = Date.now() / 1000;
+      try {
+        // Decode our mock token (base64 encoded JSON)
+        const decoded = JSON.parse(atob(tokens.accessToken));
+        const currentTime = Math.floor(Date.now() / 1000);
         
-        isValid = decodedToken.exp > currentTime;
+        isValid = decoded.exp > currentTime;
+      } catch (e) {
+        return false;
       }
       
       // If token is expired or about to expire, refresh it
@@ -491,7 +343,7 @@ export class AuthService {
     }
   }
   
-  // Updated token storage methods using cookies with dynamic domain detection
+  // Token storage methods using cookies with dynamic domain detection
   public saveTokensToStorage(authResponse: AuthResponse): void {
     // Skip if not in browser environment
     if (!this.isBrowser()) return;
@@ -575,25 +427,9 @@ export class AuthService {
     }
   }
   
-  // Method to get user profile - will use the token to get data from the API
-  public async getUserProfile(): Promise<User | null> {
-    // First try to get from the access token
-    const user = this.getCurrentUser();
-    if (user) {
-      return user;
-    }
-    
-    // If that fails and we're in production, try to fetch from API
-    if (process.env.NODE_ENV === 'production') {
-      try {
-        const response = await this.api.get<User>('/api/user/profile');
-        return response.data;
-      } catch (error) {
-        console.error('Error fetching user profile:', error);
-        return null;
-      }
-    }
-    
-    return null;
+  // Method to get user profile from the token
+  public getUserProfile(): User | null {
+    // For POC, just return the user from the access token
+    return this.getCurrentUser();
   }
 }
